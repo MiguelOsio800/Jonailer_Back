@@ -43,6 +43,14 @@ const User = sequelize.define('User', {
       key: 'id',
     },
   },
+  asociadoId: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    references: {
+      model: 'Asociados',
+      key: 'id',
+    },
+  },
 });
 
 // Hook para hashear la contraseña automáticamente antes de crear o actualizar.

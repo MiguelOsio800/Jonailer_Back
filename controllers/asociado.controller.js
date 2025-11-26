@@ -9,9 +9,21 @@ import {
 
 // --- CRUD para Asociados ---
 
+// @desc    Obtener asociados (filtrado si es el propio asociado)
 export const getAsociados = async (req, res) => {
     try {
-        const asociados = await Asociado.findAll({ order: [['nombre', 'ASC']] });
+        const whereClause = {};
+
+        // 👇 SI EL USUARIO ES ASOCIADO (NO ADMIN), SOLO SE VE A SÍ MISMO
+        // req.user viene del middleware 'protect'
+        if (req.user && req.user.asociadoId) {
+            whereClause.id = req.user.asociadoId;
+        }
+
+        const asociados = await Asociado.findAll({ 
+            where: whereClause, // Aplicamos el filtro
+            order: [['nombre', 'ASC']] 
+        });
         res.json(asociados);
     } catch (error) {
         res.status(500).json({ message: 'Error al obtener asociados', error: error.message });

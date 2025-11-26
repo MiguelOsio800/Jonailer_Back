@@ -2,9 +2,21 @@ import { Vehicle, Invoice, Remesa, sequelize } from '../models/index.js';
 
 // --- CRUD Básico para Vehículos ---
 
+// @desc    Obtener vehículos (filtrados si es asociado)
 export const getVehicles = async (req, res) => {
     try {
-        const vehicles = await Vehicle.findAll({ order: [['modelo', 'ASC']] });
+        const whereClause = {};
+
+        // 👇 SI EL USUARIO ES ASOCIADO, FILTRAMOS SOLO SUS VEHÍCULOS
+        // req.user viene del middleware 'protect'
+        if (req.user && req.user.asociadoId) {
+            whereClause.asociadoId = req.user.asociadoId;
+        }
+
+        const vehicles = await Vehicle.findAll({ 
+            where: whereClause, // Aplicamos el filtro
+            order: [['modelo', 'ASC']] 
+        });
         res.json(vehicles);
     } catch (error) {
         res.status(500).json({ message: 'Error al obtener vehículos', error: error.message });

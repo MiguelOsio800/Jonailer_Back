@@ -17,7 +17,8 @@ export const getUsers = async (req, res) => {
 // @desc    Crear un nuevo usuario
 // @route   POST /api/users
 export const createUser = async (req, res) => {
-    const { name, username, password, roleId, officeId } = req.body;
+    // Agregamos asociadoId al destructuring
+    const { name, username, password, roleId, officeId, asociadoId } = req.body;
     try {
         const newUser = await User.create({
             id: `user-${Date.now()}`,
@@ -25,8 +26,9 @@ export const createUser = async (req, res) => {
             username,
             password,
             roleId,
-            // CAMBIO: Si officeId es un string vacío o nulo, lo guardamos como null real.
+            // Si viene vacío o undefined, lo guardamos como null
             officeId: officeId || null,
+            asociadoId: asociadoId || null,
         });
         const { password: _, ...userWithoutPassword } = newUser.toJSON();
         res.status(201).json(userWithoutPassword);
@@ -47,10 +49,10 @@ export const updateUser = async (req, res) => {
             delete req.body.password;
         }
 
-        // CAMBIO: Hacemos la misma validación para la actualización.
         const dataToUpdate = {
             ...req.body,
-            officeId: req.body.officeId || null
+            officeId: req.body.officeId || null, // <--- Coma agregada aquí
+            asociadoId: req.body.asociadoId || null
         };
 
         await user.update(dataToUpdate);
