@@ -58,7 +58,13 @@ const Invoice = sequelize.define('Invoice', {
   remesaId: { // Campo para la relación con Remesa
     type: DataTypes.STRING,
     allowNull: true,
-  }
+  },
+  // Nuevo campo para guardar el nombre del oficinista
+  createdByName: {
+    type: DataTypes.STRING,
+    allowNull: true,
+  },
+  
 }, {
   timestamps: true,
 });
