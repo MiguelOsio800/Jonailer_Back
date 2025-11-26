@@ -33,7 +33,6 @@ export const createInvoice = async (req, res) => {
         validateClient(receiver, 'destinatario');
 
         // CORRECCIÓN: Extraemos solo los campos válidos del modelo Cliente para evitar el warning.
-        // Esto previene que campos extra (como 'email') se pasen a 'defaults'.
         const getValidClientData = ({ idNumber, clientType, name, phone, address }) => ({
             idNumber,
             clientType,
@@ -81,6 +80,8 @@ export const createInvoice = async (req, res) => {
             status: 'Activa',
             paymentStatus: 'Pendiente',
             shippingStatus: 'Pendiente para Despacho',
+            // 👇 CORRECCIÓN APLICADA AQUÍ: Guardar el oficinista
+            createdByName: invoiceData.createdByName || 'Sistema' 
         }, { transaction: t });
         
         // If everything above succeeded, the transaction will be committed.

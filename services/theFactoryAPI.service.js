@@ -4,7 +4,7 @@ import { CompanyInfo } from '../models/index.js';
 
 dotenv.config();
 
-const API_URL_AUTH = 'https://demoemisionv2.thefactoryhka.com.ve/api/autenticacion';
+const API_URL_AUTH = 'http:https://demoemisionv2.thefactoryhka.com.ve/api/Autenticacion';
 const API_URL_EMISION = 'https://demoemisionv2.thefactoryhka.com.ve/api/Emision';
 
 // --- MEJORA: Caché en memoria para el token ---
