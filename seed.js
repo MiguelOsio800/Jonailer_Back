@@ -36,10 +36,31 @@ const seedDatabase = async () => {
     const adminPermissions = ALL_PERMISSION_KEYS.reduce((acc, key) => ({ ...acc, [key]: true }), {});
     const techPermissions = { ...adminPermissions };
     const operatorPermissions = {
-        'dashboard.view': true, 'shipping-guide.view': true, 'invoices.view': true,
-        'invoices.create': true, 'invoices.edit': true, 'invoices.changeStatus': true,
-        'flota.view': true, 'remesas.view': true, 'asociados.view': true, 'clientes.view': true,
-        'clientes.create': true, 'clientes.edit': true, 'reports.view': true,
+        // --- Vistas Operativas ---
+        'dashboard.view': true,
+        'shipping-guide.view': true,
+        'invoices.view': true,
+        'flota.view': true,
+        'remesas.view': true,
+        'asociados.view': true,
+        'clientes.view': true,
+        'proveedores.view': true, // Necesario para evitar 403 en proveedores
+        'inventario-bienes.view': true, // Necesario para evitar 403 en activos
+        
+        // --- Permisos de Acción ---
+        'invoices.create': true,
+        'invoices.edit': true,
+        'invoices.changeStatus': true,
+        'clientes.create': true,
+        'clientes.edit': true,
+        
+        // --- Catálogos (SOLO LECTURA para que carguen los selectores) ---
+        'categories.view': true,
+        'shipping-types.view': true,
+        'payment-methods.view': true,
+        'offices.view': true,
+        'bienes-categorias.view': true,
+        'reports.view': true,
     };
 
     // --- 1. Roles y Permisos ---

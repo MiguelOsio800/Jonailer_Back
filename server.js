@@ -48,27 +48,31 @@ app.use(morgan('combined'));
 // --- Configuración de CORS ---
 // Lista de orígenes permitidos.
 const allowedOrigins = [
-  'http://localhost:3000', // Origen para desarrollo local.
-  // Expresión regular para aceptar cualquier subdominio del entorno de desarrollo en la nube.
-  /https:\/\/.*-h813239537\.scf\.usercontent\.goog$/ 
+  'http://localhost:3000',
+  'http://localhost:5173',
+  'https://4wt9b8zl-5000.use2.devtunnels.ms', // Tu backend
+  'https://4wt9b8zl-5173.use2.devtunnels.ms'  // Tu frontend (si reenviaras el puerto 5173)
 ];
 
 const corsOptions = {
   origin: function (origin, callback) {
-    // Permite peticiones sin origen (como Postman o apps móviles) y las de la whitelist.
+    // Permite peticiones sin origen (como Postman) y las de la whitelist
     const isAllowed = allowedOrigins.some(allowedOrigin => 
       (allowedOrigin instanceof RegExp) ? allowedOrigin.test(origin) : allowedOrigin === origin
     );
+    
     if (isAllowed || !origin) {
       callback(null, true);
     } else {
+      console.log('BLOQUEO CORS DETECTADO. Origen intentando entrar:', origin); // <--- AGREGA ESTO
       callback(new Error('No permitido por CORS'));
     }
   }
 };
 
 // Middlewares
-app.use(cors(corsOptions));
+//app.use(cors(corsOptions));
+app.use(cors({ origin: '*' }));
 app.use(express.json({ limit: '30mb' }));
 app.use(express.urlencoded({ limit: '30mb', extended: true }));
 
