@@ -1,5 +1,6 @@
 import { Invoice, CompanyInfo, Client, InventoryItem, sequelize } from '../models/index.js';
-import { sendInvoiceToHKA } from '../services/theFactoryAPI.service.js';
+// SE AGREGARON LAS NUEVAS FUNCIONES AL IMPORT:
+import { sendInvoiceToHKA, sendCreditNoteToHKA, sendDebitNoteToHKA } from '../services/theFactoryAPI.service.js';
 
 export const getInvoices = async (req, res) => {
     try {
@@ -139,5 +140,88 @@ export const sendInvoiceToTheFactory = async (req, res) => {
     } catch (error) {
         console.error(`[HKA] Error al enviar la factura ${req.params.id}:`, error.message);
         res.status(500).json({ message: error.message || 'Error al enviar la factura.' });
+    }
+};
+
+// --- NUEVAS FUNCIONES PARA NOTAS DE CRÉDITO Y DÉBITO ---
+
+// @desc    Generar y enviar Nota de Crédito a HKA (Anulación/Devolución)
+// @route   POST /api/invoices/:id/credit-note
+export const createCreditNote = async (req, res) => {
+    const { id } = req.params;
+    const { motivo } = req.body; // El frontend debe enviar { "motivo": "Error en precio" }
+
+    if (!motivo) {
+        return res.status(400).json({ message: 'El motivo de la nota de crédito es obligatorio.' });
+    }
+
+    try {
+        const invoice = await Invoice.findByPk(id);
+        if (!invoice) {
+            return res.status(404).json({ message: 'Factura no encontrada' });
+        }
+
+        // Generamos un número temporal o consecutivo para la nota
+        // IDEALMENTE: Deberías tener un contador en DB para notas, igual que para facturas.
+        // Por ahora usamos un timestamp para que no choque en pruebas.
+        const noteNumber = `NC-${Date.now().toString().slice(-6)}`; 
+
+        console.log(`Generando Nota de Crédito para Factura ${invoice.invoiceNumber}...`);
+
+        const hkaResponse = await sendCreditNoteToHKA(invoice, {
+            noteNumber: noteNumber,
+            reason: motivo
+        });
+
+        // Opcional: Actualizar estado de la factura local a "Anulada" si es nota total
+        // invoice.status = 'Anulada';
+        // await invoice.save();
+
+        res.status(200).json({
+            message: 'Nota de Crédito enviada a HKA exitosamente.',
+            hkaResponse,
+            noteNumber
+        });
+
+    } catch (error) {
+        console.error('Error al crear Nota de Crédito:', error);
+        res.status(500).json({ message: error.message || 'Error al procesar la nota de crédito.' });
+    }
+};
+
+// @desc    Generar y enviar Nota de Débito a HKA (Recargo/Corrección)
+// @route   POST /api/invoices/:id/debit-note
+export const createDebitNote = async (req, res) => {
+    const { id } = req.params;
+    const { motivo } = req.body;
+
+    if (!motivo) {
+        return res.status(400).json({ message: 'El motivo de la nota de débito es obligatorio.' });
+    }
+
+    try {
+        const invoice = await Invoice.findByPk(id);
+        if (!invoice) {
+            return res.status(404).json({ message: 'Factura no encontrada' });
+        }
+
+        const noteNumber = `ND-${Date.now().toString().slice(-6)}`;
+
+        console.log(`Generando Nota de Débito para Factura ${invoice.invoiceNumber}...`);
+
+        const hkaResponse = await sendDebitNoteToHKA(invoice, {
+            noteNumber: noteNumber,
+            reason: motivo
+        });
+
+        res.status(200).json({
+            message: 'Nota de Débito enviada a HKA exitosamente.',
+            hkaResponse,
+            noteNumber
+        });
+
+    } catch (error) {
+        console.error('Error al crear Nota de Débito:', error);
+        res.status(500).json({ message: error.message || 'Error al procesar la nota de débito.' });
     }
 };

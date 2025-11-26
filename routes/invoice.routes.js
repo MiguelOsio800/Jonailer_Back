@@ -1,6 +1,15 @@
 import express from 'express';
 // Se corrige la importación para tener solo una línea con todas las funciones necesarias
-import { getInvoices, createInvoice, updateInvoice, deleteInvoice, sendInvoiceToTheFactory } from '../controllers/invoice.controller.js';
+// IMPORTANTE: Agregamos las nuevas funciones al import
+import { 
+    getInvoices, 
+    createInvoice, 
+    updateInvoice, 
+    deleteInvoice, 
+    sendInvoiceToTheFactory,
+    createCreditNote, // <--- Nuevo
+    createDebitNote   // <--- Nuevo
+} from '../controllers/invoice.controller.js';
 import { protect, authorize } from '../middleware/auth.middleware.js';
 
 const router = express.Router();
@@ -19,5 +28,15 @@ router.route('/:id')
 // Esta es la ruta que el frontend llamará para enviar la factura a HKA
 router.route('/:id/send-to-hka')
     .post(authorize('invoices.create'), sendInvoiceToTheFactory);
+
+// --- RUTAS HKA NUEVAS ---
+
+// Nueva Ruta: Nota de Crédito (Anular)
+router.route('/:id/credit-note')
+    .post(authorize('invoices.void'), createCreditNote); // Usamos permiso de anular ('invoices.void')
+
+// Nueva Ruta: Nota de Débito
+router.route('/:id/debit-note')
+    .post(authorize('invoices.create'), createDebitNote);
 
 export default router;
