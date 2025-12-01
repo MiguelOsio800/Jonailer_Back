@@ -21,10 +21,16 @@ const Office = sequelize.define('Office', {
     type: DataTypes.STRING,
     allowNull: false,
   },
-  phone: {
+phone: {
     type: DataTypes.STRING,
     allowNull: false,
   },
+  // --- NUEVO CAMPO PARA HKA ---
+  hkaSerie: {
+    type: DataTypes.STRING,
+    allowNull: true, // Puede ser null si la oficina no factura
+    comment: "Serie de facturación para HKA (Ej: A, B, C)"
+  }
 }, {
   timestamps: false,
 });

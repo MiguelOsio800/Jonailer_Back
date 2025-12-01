@@ -49,6 +49,9 @@ Vehicle.hasMany(Certificado, { foreignKey: 'vehiculoId' });
 Invoice.belongsTo(Vehicle, { foreignKey: 'vehicleId' });
 Vehicle.hasMany(Invoice, { foreignKey: 'vehicleId' });
 
+Invoice.belongsTo(Office, { foreignKey: 'officeId' });
+Office.hasMany(Invoice, { foreignKey: 'officeId' });
+
 // Expense Relations
 Expense.belongsTo(Office, { foreignKey: 'officeId' });
 Office.hasMany(Expense, { foreignKey: 'officeId' });
