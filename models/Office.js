@@ -6,13 +6,11 @@ const Office = sequelize.define('Office', {
     type: DataTypes.STRING,
     primaryKey: true,
   },
-
   code: {
     type: DataTypes.STRING,
-    allowNull: true, // O 'false' si quieres que sea obligatorio
-    unique: true, // Para asegurar que no haya dos oficinas con el mismo código
+    allowNull: true,
+    unique: true,
   },
-
   name: {
     type: DataTypes.STRING,
     allowNull: false,
@@ -21,15 +19,16 @@ const Office = sequelize.define('Office', {
     type: DataTypes.STRING,
     allowNull: false,
   },
-phone: {
+  phone: {
     type: DataTypes.STRING,
     allowNull: false,
   },
-  // --- NUEVO CAMPO PARA HKA ---
+  // --- NUEVO: Campo para la serie de facturación HKA ---
   hkaSerie: {
     type: DataTypes.STRING,
-    allowNull: true, // Puede ser null si la oficina no factura
-    comment: "Serie de facturación para HKA (Ej: A, B, C)"
+    allowNull: true, 
+    defaultValue: null, // Ej: "A", "B"
+    comment: "Serie de facturación HKA asignada a esta oficina"
   }
 }, {
   timestamps: false,
