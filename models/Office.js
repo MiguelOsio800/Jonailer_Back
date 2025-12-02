@@ -23,12 +23,18 @@ const Office = sequelize.define('Office', {
     type: DataTypes.STRING,
     allowNull: false,
   },
-  // --- NUEVO: Campo para la serie de facturación HKA ---
+  // --- Campo para la serie de facturación HKA (A, B, C...) ---
   hkaSerie: {
     type: DataTypes.STRING,
     allowNull: true, 
-    defaultValue: null, // Ej: "A", "B"
+    defaultValue: null,
     comment: "Serie de facturación HKA asignada a esta oficina"
+  },
+  // --- NUEVO: Campo vital para el contador de facturas ---
+  lastInvoiceNumber: {
+    type: DataTypes.INTEGER,
+    defaultValue: 0,
+    allowNull: false
   }
 }, {
   timestamps: false,

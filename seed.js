@@ -92,8 +92,8 @@ const seedDatabase = async () => {
     // --- 3. Oficinas ---
     console.log('Sembrando Oficinas...');
     await Office.bulkCreate([
-        { id: 'office-caracas', code: 'CCS', name: 'Oficina Principal - Caracas', address: 'Av. Urdaneta, Caracas', phone: '0212-111-2233' },
-        { id: 'office-valencia', code: 'VLN', name: 'Sucursal Valencia', address: 'Zona Industrial, Valencia', phone: '0241-444-5566' }
+        { id: 'office-caracas', code: 'A', name: 'Oficina Principal - Caracas', address: 'Av. Urdaneta, Caracas', phone: '0212-111-2233' },
+        { id: 'office-valencia', code: 'C', name: 'Sucursal Valencia', address: 'Zona Industrial, Valencia', phone: '0241-444-5566' }
     ], { updateOnDuplicate: ['name', 'address', 'phone', 'code'] });
     console.log('Oficinas sembradas.');
 
@@ -291,30 +291,7 @@ const seedDatabase = async () => {
     } else {
         console.log('Asiento manual de ejemplo ya existía.');
     }
-
-    // --- 10. Factura de Ejemplo ---
-    console.log('Sembrando Factura de ejemplo...');
-    await Invoice.findOrCreate({
-        where: { id: 'inv-seed-1' },
-        defaults: {
-            id: 'inv-seed-1',
-            invoiceNumber: 'F-000001',
-            controlNumber: '00000001',
-            date: new Date(),
-            clientName: 'Maria Rodriguez',
-            clientIdNumber: 'V-12345678-9',
-            totalAmount: 116.00,
-            status: 'Activa',
-            paymentStatus: 'Pendiente',
-            shippingStatus: 'Pendiente para Despacho',
-            guide: {
-                sender: { id: 'client-1', name: 'Maria Rodriguez', idNumber: 'V-12345678-9' },
-                receiver: { id: 'client-2', name: 'Comercial XYZ', idNumber: 'J-87654321-0', address: 'El Rosal, Caracas' },
-                merchandise: [{ quantity: 2, description: 'Cajas de repuestos', weight: 10, price: 58 }]
-            }
-        }
-    });
-    console.log('Factura de ejemplo verificada o creada.');
+    console.log('Siembra de datos completada exitosamente.');
 
   } catch (error) {
     console.error('Error durante la siembra de datos:', error);

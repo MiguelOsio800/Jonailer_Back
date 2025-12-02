@@ -5,14 +5,37 @@ import { CompanyInfo, Office } from '../models/index.js';
 
 dotenv.config();
 
-// --- CORRECCIÓN 1: URL con mayúscula 'Autenticacion' (Obligatorio para HKA) ---
+// --- CONFIGURACIÓN DE URLS ---
 const API_URL_AUTH = 'https://demoemisionv2.thefactoryhka.com.ve/api/Autenticacion';
 const API_URL_EMISION = 'https://demoemisionv2.thefactoryhka.com.ve/api/Emision';
 
-// --- Caché de Token ---
+// --- CACHÉ DE TOKEN ---
 let cachedToken = {
     token: null,
     expires: 0,
+};
+
+// --- HELPER: OBTENER HORA FORMATEADA (SOLUCIÓN AL ERROR 0104) ---
+// Garantiza el formato hh:mm:ss tt (Ej: "02:05:10 pm") con doble dígito en la hora
+const getHkaTime = () => {
+    const options = {
+        timeZone: 'America/Caracas',
+        hour: '2-digit',
+        minute: '2-digit',
+        second: '2-digit',
+        hour12: true
+    };
+    
+    // Usamos Intl para formatear partes específicas y asegurar el "0" inicial
+    const formatter = new Intl.DateTimeFormat('en-US', options);
+    const parts = formatter.formatToParts(new Date());
+    
+    const hour = parts.find(p => p.type === 'hour').value.padStart(2, '0');
+    const minute = parts.find(p => p.type === 'minute').value;
+    const second = parts.find(p => p.type === 'second').value;
+    const dayPeriod = parts.find(p => p.type === 'dayPeriod').value.toLowerCase();
+
+    return `${hour}:${minute}:${second} ${dayPeriod}`;
 };
 
 // --- OBTENER TOKEN ---
@@ -26,7 +49,6 @@ const getAuthToken = async () => {
             throw new Error('Las credenciales HKA_USUARIO y HKA_CLAVE no están definidas en el archivo .env');
         }
 
-        // Reutilizar token si es válido
         if (cachedToken.token && Date.now() < cachedToken.expires) {
             console.log("Usando token de HKA cacheado.");
             return cachedToken.token;
@@ -38,27 +60,19 @@ const getAuthToken = async () => {
             clave: clave
         });
 
-        // --- MEJORA: Validación de respuesta ---
         if (!response.data?.token) {
-            console.error("❌ Respuesta HKA sin token:", response.data);
-            const msg = response.data?.mensaje || response.data?.error || 'Error desconocido';
-            throw new Error(`Fallo autenticación HKA: ${msg}`);
+            console.error("RESPUESTA DEL SERVIDOR HKA:", response.data);
+            const serverMessage = response.data?.mensaje || response.data?.error || 'Respuesta inesperada';
+            throw new Error(`La API respondió pero no envió token: ${serverMessage}`);
         }
 
         cachedToken.token = response.data.token;
-        cachedToken.expires = Date.now() + 50 * 60 * 1000; // 50 minutos
+        cachedToken.expires = Date.now() + 50 * 60 * 1000; 
         console.log("✅ Token de HKA obtenido exitosamente.");
         return cachedToken.token;
 
     } catch (error) {
         console.error("!!!!!!!!!!!!!!!!!! ERROR DE AUTENTICACIÓN HKA !!!!!!!!!!!!!!!!!!");
-        if (error.response) {
-            console.error('Data:', error.response.data);
-            console.error('Status:', error.response.status);
-        } else {
-            console.error('Error:', error.message);
-        }
-        console.error("!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!");
         throw new Error(error.message || 'No se pudo autenticar con The Factory HKA.');
     }
 };
@@ -98,7 +112,7 @@ const formatDetails = (invoice, IVA_RATE = 0.16) => {
             "Cantidad": cantidad.toString(),
             "PrecioUnitario": (cantidad > 0 ? itemSubtotal / cantidad : 0).toFixed(2).toString(),
             "PrecioItem": precioItemRedondeado.toFixed(2).toString(),
-            "CodigoImpuesto": "G", // G para IVA General
+            "CodigoImpuesto": "G",
             "TasaIVA": (IVA_RATE * 100).toFixed(0),
             "ValorIVA": valorIvaRedondeado.toFixed(2).toString(),
             "ValorTotalItem": valorTotalItem.toFixed(2).toString()
@@ -121,21 +135,29 @@ const formatDate = (dateInput) => {
 export const sendInvoiceToHKA = async (invoice) => {
     try {
         const companyInfo = await CompanyInfo.findByPk(1);
-        if (!companyInfo) throw new Error('No se encontró información de la empresa.');
-        
+        if (!companyInfo) {
+            throw new Error('No se encontró la información de la empresa para la facturación.');
+        }
+
         const token = await getAuthToken();
 
-        // --- CORRECCIÓN 2: Usar 'code' de la oficina como Serie ---
+        // --- CORRECCIÓN VITAL: Usar office.code ---
         const office = invoice.Office;
         if (!office?.code) {
-            throw new Error(`La oficina asociada no tiene un CÓDIGO (Serie) configurado en la BD.`);
+            throw new Error(`La oficina asociada no tiene un CÓDIGO (Serie) asignado en la BD. Revise la tabla Offices.`);
         }
-        const serie = office.code;
+        const serie = office.code; // <--- Usamos el código existente
 
         const numero = invoice.invoiceNumber.split('-')[1] || invoice.invoiceNumber;
         const { NumerosALetras } = await import('numero-a-letras');
         const { detalles, subTotalGeneral, ivaGeneral, totalGeneral } = formatDetails(invoice);
         const IVA_RATE = 0.16;
+        
+        // Tipo de identificación
+        const idType = (invoice.clientIdNumber.charAt(0) || 'V').toUpperCase();
+        
+        // Hora segura
+        const horaEmision = getHkaTime();
 
         const hkaInvoicePayload = {
             "DocumentoElectronico": {
@@ -145,7 +167,7 @@ export const sendInvoiceToHKA = async (invoice) => {
                         "Serie": serie,
                         "NumeroDocumento": numero,
                         "FechaEmision": formatDate(invoice.date),
-                        "HoraEmision": new Date().toLocaleTimeString('en-US', { hour12: true, timeZone: 'America/Caracas' }).toLowerCase(),
+                        "HoraEmision": horaEmision,
                         "TipoDeVenta": "1",
                         "Moneda": "VES",
                     },
@@ -157,7 +179,7 @@ export const sendInvoiceToHKA = async (invoice) => {
                         "Telefono": [companyInfo.phone]
                     },
                     "Comprador": {
-                        "TipoIdentificacion": (invoice.clientIdNumber.charAt(0) || 'V').toUpperCase(),
+                        "TipoIdentificacion": idType,
                         "NumeroIdentificacion": invoice.clientIdNumber,
                         "RazonSocial": invoice.clientName,
                         "Direccion": invoice.guide?.receiver?.address || 'N/A',
@@ -172,10 +194,17 @@ export const sendInvoiceToHKA = async (invoice) => {
                         "TotalIVA": ivaGeneral.toFixed(2).toString(),
                         "MontoTotalConIVA": totalGeneral.toFixed(2).toString(),
                         "TotalAPagar": totalGeneral.toFixed(2).toString(),
-                        "MontoEnLetras": NumerosALetras(totalGeneral, { 
-                            plural: "bolívares", singular: "bolívar", centPlural: "céntimos", centSingular: "céntimo"
+                        "MontoEnLetras": NumerosALetras(totalGeneral, {
+                            plural: "bolívares",
+                            singular: "bolívar",
+                            centPlural: "céntimos",
+                            centSingular: "céntimo",
                         }),
-                        "FormasPago": [{ "Forma": "01", "Monto": totalGeneral.toFixed(2).toString(), "Moneda": "VES" }],
+                        "FormasPago": [{
+                            "Forma": "01",
+                            "Monto": totalGeneral.toFixed(2).toString(),
+                            "Moneda": "VES"
+                        }],
                         "ImpuestosSubtotal": [{
                             "CodigoTotalImp": "G",
                             "AlicuotaImp": (IVA_RATE * 100).toFixed(2),
@@ -210,23 +239,23 @@ export const sendDebitNoteToHKA = async (invoice, noteDetails) => {
     return await sendNoteToHKA(invoice, noteDetails, "03");
 };
 
-// --- LÓGICA DE NOTAS (Con los arreglos aplicados) ---
+// --- LÓGICA DE NOTAS ---
 const sendNoteToHKA = async (invoice, noteDetails, docType) => {
     try {
         const companyInfo = await CompanyInfo.findByPk(1);
         if (!companyInfo) throw new Error('No se encontró la información de la empresa.');
         const token = await getAuthToken();
 
-        // VALIDACIÓN: Usar office.code
+        // --- CORRECCIÓN VITAL: Usar office.code ---
         const office = invoice.Office;
         if (!office?.code) {
             throw new Error(`La oficina asociada no tiene un CÓDIGO (Serie) en la BD. Revise la tabla Offices.`);
         }
         const serie = office.code;
 
-        // Fechas
-        const fechaEmision = new Date().toLocaleDateString('es-VE'); // dd/mm/yyyy
-        const horaEmision = new Date().toLocaleTimeString('en-US', { hour12: true, timeZone: 'America/Caracas' }).toLowerCase();
+        // Fechas con formato seguro
+        const fechaEmision = new Date().toLocaleDateString('es-VE');
+        const horaEmision = getHkaTime(); // <--- Hora segura
         const fechaFacturaAfectada = formatDate(invoice.date);
 
         // Montos
@@ -240,7 +269,7 @@ const sendNoteToHKA = async (invoice, noteDetails, docType) => {
         }
 
         const { NumerosALetras } = await import('numero-a-letras');
-        const { detalles, totalGeneral } = formatDetails(invoice); // Reutilizamos lógica de detalles
+        const { detalles, totalGeneral } = formatDetails(invoice);
 
         const hkaPayload = {
             "DocumentoElectronico": {
@@ -284,7 +313,11 @@ const sendNoteToHKA = async (invoice, noteDetails, docType) => {
                         "MontoEnLetras": NumerosALetras(totalGeneral, { 
                             plural: "bolívares", singular: "bolívar", centPlural: "céntimos", centSingular: "céntimo"
                         }),
-                        "FormasPago": [{ "Forma": "01", "Monto": totalGeneral.toFixed(2).toString(), "Moneda": "VES" }],
+                        "FormasPago": [{
+                            "Forma": "01",
+                            "Monto": totalGeneral.toFixed(2).toString(),
+                            "Moneda": "VES"
+                        }],
                         "ImpuestosSubtotal": [{
                             "CodigoTotalImp": "G",
                             "AlicuotaImp": (IVA_RATE * 100).toFixed(2),
