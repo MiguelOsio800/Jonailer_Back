@@ -30,6 +30,7 @@ import asociadoRoutes from './routes/asociado.routes.js';
 import remesaRoutes from './routes/remesa.routes.js';
 import asientoManualRoutes from './routes/asientoManual.routes.js';
 import { updateBcvRate } from './services/rateUpdater.js';
+import dispatchRoutes from './routes/dispatch.routes.js';
 
 // Cargar variables de entorno (solo se necesita una vez)
 dotenv.config();
@@ -100,6 +101,7 @@ app.use('/api/products', productRoutes);
 app.use('/api/asociados', asociadoRoutes);
 app.use('/api/remesas', remesaRoutes);
 app.use('/api/asientos-manuales', asientoManualRoutes);
+app.use('/api/dispatches', dispatchRoutes);
 
 // --- Lógica de arranque del servidor ---
 const startServer = async () => {

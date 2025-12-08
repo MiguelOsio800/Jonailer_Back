@@ -15,15 +15,11 @@ let cachedToken = {
     expires: 0,
 };
 
-// --- HELPER: OBTENER HORA FORMATEADA (SOLUCIÓN AL ERROR 0104) ---
-// Garantiza el formato hh:mm:ss tt (Ej: "02:05:10 pm") con doble dígito en la hora
+// --- HELPER 1: HORA SEGURA (hh:mm:ss tt) ---
 const getHkaTime = () => {
     const options = {
         timeZone: 'America/Caracas',
-        hour: '2-digit',
-        minute: '2-digit',
-        second: '2-digit',
-        hour12: true
+        hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true
     };
     
     // Usamos Intl para formatear partes específicas y asegurar el "0" inicial
@@ -36,6 +32,24 @@ const getHkaTime = () => {
     const dayPeriod = parts.find(p => p.type === 'dayPeriod').value.toLowerCase();
 
     return `${hour}:${minute}:${second} ${dayPeriod}`;
+};
+
+// --- HELPER 2: FECHA SEGURA (dd/MM/yyyy) ---
+const getHkaDate = () => {
+    const d = new Date();
+    const day = String(d.getDate()).padStart(2, '0');
+    const month = String(d.getMonth() + 1).padStart(2, '0');
+    const year = d.getFullYear();
+    return `${day}/${month}/${year}`;
+};
+
+// --- HELPER 3: FORMATO FECHA INPUT ---
+const formatDateInput = (dateInput) => {
+    const d = new Date(dateInput);
+    const day = String(d.getUTCDate()).padStart(2, '0');
+    const month = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const year = d.getUTCFullYear();
+    return `${day}/${month}/${year}`;
 };
 
 // --- OBTENER TOKEN ---
@@ -122,7 +136,7 @@ const formatDetails = (invoice, IVA_RATE = 0.16) => {
     return { detalles, subTotalGeneral, ivaGeneral, totalGeneral: subTotalGeneral + ivaGeneral };
 };
 
-// --- HELPER: FORMATEAR FECHAS ---
+// --- HELPER: FORMATEAR FECHAS BD ---
 const formatDate = (dateInput) => {
     const d = new Date(dateInput);
     const day = String(d.getUTCDate()).padStart(2, '0');
@@ -141,22 +155,18 @@ export const sendInvoiceToHKA = async (invoice) => {
 
         const token = await getAuthToken();
 
-        // --- CORRECCIÓN VITAL: Usar office.code ---
         const office = invoice.Office;
         if (!office?.code) {
-            throw new Error(`La oficina asociada no tiene un CÓDIGO (Serie) asignado en la BD. Revise la tabla Offices.`);
+            throw new Error(`La oficina asociada no tiene un CÓDIGO (Serie) asignado en la BD.`);
         }
-        const serie = office.code; // <--- Usamos el código existente
+        const serie = office.code;
 
         const numero = invoice.invoiceNumber.split('-')[1] || invoice.invoiceNumber;
         const { NumerosALetras } = await import('numero-a-letras');
         const { detalles, subTotalGeneral, ivaGeneral, totalGeneral } = formatDetails(invoice);
         const IVA_RATE = 0.16;
         
-        // Tipo de identificación
         const idType = (invoice.clientIdNumber.charAt(0) || 'V').toUpperCase();
-        
-        // Hora segura
         const horaEmision = getHkaTime();
 
         const hkaInvoicePayload = {
@@ -194,23 +204,11 @@ export const sendInvoiceToHKA = async (invoice) => {
                         "TotalIVA": ivaGeneral.toFixed(2).toString(),
                         "MontoTotalConIVA": totalGeneral.toFixed(2).toString(),
                         "TotalAPagar": totalGeneral.toFixed(2).toString(),
-                        "MontoEnLetras": NumerosALetras(totalGeneral, {
-                            plural: "bolívares",
-                            singular: "bolívar",
-                            centPlural: "céntimos",
-                            centSingular: "céntimo",
+                        "MontoEnLetras": NumerosALetras(totalGeneral, { 
+                            plural: "bolívares", singular: "bolívar", centPlural: "céntimos", centSingular: "céntimo"
                         }),
-                        "FormasPago": [{
-                            "Forma": "01",
-                            "Monto": totalGeneral.toFixed(2).toString(),
-                            "Moneda": "VES"
-                        }],
-                        "ImpuestosSubtotal": [{
-                            "CodigoTotalImp": "G",
-                            "AlicuotaImp": (IVA_RATE * 100).toFixed(2),
-                            "BaseImponibleImp": subTotalGeneral.toFixed(2).toString(),
-                            "ValorTotalImp": ivaGeneral.toFixed(2).toString()
-                        }]
+                        "FormasPago": [{ "Forma": "01", "Monto": totalGeneral.toFixed(2).toString(), "Moneda": "VES" }],
+                        "ImpuestosSubtotal": [{ "CodigoTotalImp": "G", "AlicuotaImp": (IVA_RATE * 100).toFixed(2), "BaseImponibleImp": subTotalGeneral.toFixed(2).toString(), "ValorTotalImp": ivaGeneral.toFixed(2).toString() }]
                     }
                 },
                 "DetallesItems": detalles
@@ -239,26 +237,43 @@ export const sendDebitNoteToHKA = async (invoice, noteDetails) => {
     return await sendNoteToHKA(invoice, noteDetails, "03");
 };
 
-// --- LÓGICA DE NOTAS ---
+// --- LÓGICA DE NOTAS (CORREGIDA: AGREGADA SERIE FACTURA AFECTADA) ---
 const sendNoteToHKA = async (invoice, noteDetails, docType) => {
     try {
         const companyInfo = await CompanyInfo.findByPk(1);
         if (!companyInfo) throw new Error('No se encontró la información de la empresa.');
         const token = await getAuthToken();
 
-        // --- CORRECCIÓN VITAL: Usar office.code ---
         const office = invoice.Office;
         if (!office?.code) {
-            throw new Error(`La oficina asociada no tiene un CÓDIGO (Serie) en la BD. Revise la tabla Offices.`);
+            throw new Error(`La oficina asociada no tiene un CÓDIGO (Serie) en la BD.`);
         }
         const serie = office.code;
 
-        // Fechas con formato seguro
-        const fechaEmision = new Date().toLocaleDateString('es-VE');
-        const horaEmision = getHkaTime(); // <--- Hora segura
-        const fechaFacturaAfectada = formatDate(invoice.date);
+        // 1. Fechas y Hora
+        const fechaEmision = getHkaDate();
+        const horaEmision = getHkaTime();
+        
+        // 2. CORRECCIÓN NÚMEROS Y SERIES (Vital para evitar error 203)
+        // Nota: Limpiamos prefijos como "ND-"
+        const cleanNoteNumber = noteDetails.noteNumber.replace(/\D/g, ''); 
+        
+        // Factura Afectada: Separamos Serie y Número (Ej: CCS-000001 -> Serie: CCS, Num: 000001)
+        const invoiceParts = invoice.invoiceNumber.split('-');
+        let affectedInvoiceSeries = "";
+        let cleanAffectedInvoice = invoice.invoiceNumber;
 
-        // Montos
+        if (invoiceParts.length > 1) {
+            affectedInvoiceSeries = invoiceParts[0]; // "CCS"
+            cleanAffectedInvoice = invoiceParts[1];  // "000001"
+        } else {
+            // Si no tiene guión, asumimos que es el número y la serie es la misma de la oficina actual
+            affectedInvoiceSeries = serie; 
+        }
+        
+        const fechaFacturaAfectada = formatDateInput(invoice.date);
+
+        // 3. Montos
         const IVA_RATE = 0.16;
         let subTotalGeneral = 0;
         let ivaGeneral = 0;
@@ -276,13 +291,14 @@ const sendNoteToHKA = async (invoice, noteDetails, docType) => {
                 "Encabezado": {
                     "IdentificacionDocumento": {
                         "TipoDocumento": docType,
-                        "NumeroDocumento": noteDetails.noteNumber,
+                        "NumeroDocumento": cleanNoteNumber,
                         "Serie": serie,
                         "FechaEmision": fechaEmision,
                         "HoraEmision": horaEmision,
                         "TipoDeVenta": "1",
                         "Moneda": "VES",
-                        "NumeroFacturaAfectada": invoice.invoiceNumber,
+                        "NumeroFacturaAfectada": cleanAffectedInvoice,
+                        "SerieFacturaAfectada": affectedInvoiceSeries, // <--- CAMBIO: Agregado campo requerido
                         "FechaFacturaAfectada": fechaFacturaAfectada,
                         "MontoFacturaAfectada": invoice.totalAmount.toFixed(2).toString(),
                         "ComentarioFacturaAfectada": noteDetails.reason || "Ajuste administrativo"
