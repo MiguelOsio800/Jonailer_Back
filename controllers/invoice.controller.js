@@ -1,13 +1,39 @@
 import { Invoice, CompanyInfo, Client, Office, sequelize } from '../models/index.js'; // Importar Office
 import { sendInvoiceToHKA, sendCreditNoteToHKA, sendDebitNoteToHKA } from '../services/theFactoryAPI.service.js';
+import { Op } from 'sequelize'; // Importamos Op para usar OR
 
 export const getInvoices = async (req, res) => {
     try {
         const { user } = req;
         const whereClause = {};
+
+        // === FILTRO UNIVERSAL DE VISIBILIDAD DE FACTURAS (CORRECCIÓN FINAL) ===
         if (user && user.roleId !== 'role-admin' && user.officeId) {
-            whereClause.officeId = user.officeId;
+            const userOfficeId = user.officeId;
+
+            // Se usa Op.or para que el usuario vea:
+            // 1. Facturas creadas en su oficina (officeId)
+            // 2. O Facturas destinadas a su oficina.
+            whereClause[Op.or] = [
+                // Condición 1: Facturas creadas en su oficina (Historial de Ventas Propio)
+                { officeId: userOfficeId },
+                
+                // Condición 2: Facturas destinadas a su oficina (Carga Entrante o Historial de Recepción)
+                // ELIMINAMOS EL FILTRO DE SHIPPING STATUS para asegurarnos de que la factura se cargue siempre que
+                // esté asociada a una oficina de destino, sin importar su estado final.
+                {
+                    // Busca dentro del campo JSONB 'guide' la oficina de destino
+                    guide: {
+                        destinationOfficeId: userOfficeId
+                    }
+                }
+            ];
+            
+        } else if (user && user.roleId !== 'role-admin' && !user.officeId) {
+             // Si el usuario no es admin pero no tiene officeId, no ve ninguna factura.
+            whereClause.id = null;
         }
+
         const invoices = await Invoice.findAll({ 
             where: whereClause, 
             order: [['invoiceNumber', 'DESC']],
