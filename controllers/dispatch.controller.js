@@ -1,14 +1,32 @@
-import { sequelize } from '../config/db.js';
+import { sequelize, AuditLog, User, Office } from '../models/index.js'; // Importamos sequelize, AuditLog (Modelo), User y Office (para posibles joins)
 import Dispatch from '../models/Dispatch.js';
 import Invoice from '../models/Invoice.js';
 import Vehicle from '../models/Vehicle.js';
-import { generateUniqueId } from '../utils/idGenerator.js'; // Asumiendo que tiene una función para generar IDs
-import { AuditLog } from '../middleware/audit.middleware.js'; // Asumiendo el middleware de auditoría
+import { generateUniqueId } from '../utils/idGenerator.js';
+
+// Helper function para generar el log de auditoría
+const createAuditLogEntry = async (userId, userName, action, details, targetId) => {
+    try {
+        await AuditLog.create({
+            id: generateUniqueId('LOG'),
+            timestamp: new Date(),
+            userId,
+            userName,
+            action,
+            details,
+            targetId,
+        });
+    } catch (error) {
+        // Solo registramos el error, no debe detener la ejecución principal
+        console.error('Error al registrar la acción de auditoría:', error);
+    }
+}
 
 // Función para obtener todos los despachos (necesario para la vista 'Historial')
 export const getAllDispatches = async (req, res) => {
     try {
         const dispatches = await Dispatch.findAll({
+            // Se puede incluir Vehicle, Office y User aquí si es necesario para el frontend
             order: [['date', 'DESC']]
         });
         res.status(200).json(dispatches);
@@ -22,7 +40,9 @@ export const getAllDispatches = async (req, res) => {
 // 1. Lógica para crear un nuevo despacho
 export const createDispatch = async (req, res) => {
     const { invoiceIds, vehicleId, destinationOfficeId } = req.body;
-    const originOfficeId = req.user.officeId; // Asumiendo que el ID de la oficina de origen está en el token del usuario
+    // Asumiendo que el ID de la oficina de origen está en el token del usuario
+    const originOfficeId = req.user.officeId; 
+    const userName = req.user.name;
 
     if (!invoiceIds || invoiceIds.length === 0 || !vehicleId || !destinationOfficeId || !originOfficeId) {
         return res.status(400).json({ message: 'Faltan datos requeridos para el despacho.' });
@@ -31,12 +51,12 @@ export const createDispatch = async (req, res) => {
     const t = await sequelize.transaction();
 
     try {
-        const dispatchId = generateUniqueId('DSP'); // Generar un ID único para el despacho
+        const dispatchId = generateUniqueId('DSP'); 
         
         // 1. Crear el nuevo registro de Dispatch
         const newDispatch = await Dispatch.create({
             id: dispatchId,
-            dispatchNumber: `${new Date().getFullYear()}${Math.floor(Math.random() * 90000) + 10000}`, // Número simple de ejemplo
+            dispatchNumber: `DSP-${(Math.random() * 900000 + 100000).toFixed(0)}`, 
             date: new Date().toISOString().split('T')[0],
             vehicleId,
             invoiceIds,
@@ -56,21 +76,27 @@ export const createDispatch = async (req, res) => {
 
         // 3. Actualizar el estado del Vehículo a 'En Ruta'
         await Vehicle.update(
-            { status: 'En Ruta', currentLoadKg: 0 }, // Reiniciar carga actual, asumiendo que se calcula al recibir
+            { status: 'En Ruta' }, 
             { where: { id: vehicleId }, transaction: t }
         );
         
         await t.commit();
         
         // 4. Registrar en Auditoría
-        await AuditLog(req.user.id, req.user.name, 'CREATE_DISPATCH', `Despacho ${newDispatch.dispatchNumber} creado con ${invoiceIds.length} encomiendas de ${originOfficeId} a ${destinationOfficeId}.`, newDispatch.id);
+        await createAuditLogEntry(
+            req.user.id, 
+            userName, 
+            'CREATE_DISPATCH', 
+            `Despacho ${newDispatch.dispatchNumber} creado con ${invoiceIds.length} encomiendas de ${originOfficeId} a ${destinationOfficeId}.`, 
+            newDispatch.id
+        );
 
         res.status(201).json(newDispatch);
 
     } catch (error) {
         await t.rollback();
         console.error('Error al crear el despacho:', error);
-        res.status(500).json({ message: 'Error en el servidor al crear el despacho.' });
+        res.status(500).json({ message: error.message || 'Error en el servidor al crear el despacho.' });
     }
 };
 
@@ -79,8 +105,9 @@ export const createDispatch = async (req, res) => {
 export const receiveDispatch = async (req, res) => {
     const { dispatchId } = req.params;
     const { verifiedInvoiceIds } = req.body; // IDs de facturas recibidas
+    
     const receivedBy = req.user.id;
-    const receivedByName = req.user.name; // Nombre del usuario para el log
+    const receivedByName = req.user.name; 
     const destinationOfficeId = req.user.officeId;
     const receivedDate = new Date().toISOString().split('T')[0];
 
@@ -127,24 +154,32 @@ export const receiveDispatch = async (req, res) => {
             );
         }
 
-        // 4. Actualizar el estado del Vehículo (Asumimos que debe estar en 'Disponible' después de la entrega)
+        // 4. Actualizar el estado del Vehículo a 'Disponible'
         await Vehicle.update(
-            { status: 'Disponible', currentLoadKg: 0 },
+            { status: 'Disponible' },
             { where: { id: dispatch.vehicleId }, transaction: t }
         );
 
         await t.commit();
         
         // 5. Registrar en Auditoría
-        await AuditLog(receivedBy, receivedByName, 'RECEIVE_DISPATCH', `Despacho ${dispatch.dispatchNumber} recibido en ${destinationOfficeId}. Recibidas: ${verifiedInvoiceIds.length}, Faltantes: ${missingInvoiceIds.length}.`, dispatch.id);
+        await createAuditLogEntry(
+            receivedBy, 
+            receivedByName, 
+            'RECEIVE_DISPATCH', 
+            `Despacho ${dispatch.dispatchNumber} recibido en ${destinationOfficeId}. Recibidas: ${verifiedInvoiceIds.length}, Faltantes: ${missingInvoiceIds.length}.`, 
+            dispatch.id
+        );
 
-        res.status(200).json({ message: 'Despacho recibido y facturas actualizadas con éxito.', received: verifiedInvoiceIds.length, missing: missingInvoiceIds.length });
+        res.status(200).json({ 
+            message: 'Despacho recibido y facturas actualizadas con éxito.', 
+            received: verifiedInvoiceIds.length, 
+            missing: missingInvoiceIds.length 
+        });
 
     } catch (error) {
         await t.rollback();
         console.error('Error al recibir el despacho:', error);
-        res.status(500).json({ message: 'Error en el servidor al recibir el despacho.' });
+        res.status(500).json({ message: error.message || 'Error en el servidor al recibir el despacho.' });
     }
 };
-
-// ... export other utility functions for Dispatch if needed (e.g., getOne, delete)
