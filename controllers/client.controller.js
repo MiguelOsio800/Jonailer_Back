@@ -31,7 +31,7 @@ export const getClientById = async (req, res) => {
 // @desc    Crear un nuevo cliente
 // @route   POST /api/clients
 export const createClient = async (req, res) => {
-    const { id, idNumber, clientType, name, phone, address } = req.body;
+    const { id, idNumber, clientType, name, phone, address, email } = req.body;
     if (!idNumber || !name) {
         return res.status(400).json({ message: 'El RIF/Cédula y el nombre son obligatorios.' });
     }
@@ -43,6 +43,7 @@ export const createClient = async (req, res) => {
             name,
             phone,
             address,
+            email,
         });
         res.status(201).json(newClient);
     } catch (error) {
