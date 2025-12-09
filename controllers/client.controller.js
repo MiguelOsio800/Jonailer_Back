@@ -57,7 +57,12 @@ export const updateClient = async (req, res) => {
         const client = await Client.findByPk(req.params.id);
         if (client) {
             await client.update(req.body);
-            res.json(client);
+            
+            // 💡 AÑADIR: Forzar una recarga para obtener todos los campos, 
+            // incluyendo aquellos que podrían ser omitidos por defecto (como el email).
+            const updatedClient = await Client.findByPk(req.params.id); 
+            
+            res.json(updatedClient); // Usar la instancia recargada
         } else {
             res.status(404).json({ message: 'Cliente no encontrado' });
         }
