@@ -27,6 +27,10 @@ const Client = sequelize.define('Client', {
         type: DataTypes.TEXT,
         allowNull: false,
     },
+    email: {
+    type: DataTypes.STRING,
+    allowNull: true, 
+},
 });
 
 export default Client;
