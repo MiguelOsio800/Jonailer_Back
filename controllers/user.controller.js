@@ -1,4 +1,5 @@
 import { User } from '../models/index.js';
+import { generateUniqueId } from '../utils/idGenerator.js';
 
 // @desc    Obtener todos los usuarios
 // @route   GET /api/users
@@ -21,6 +22,7 @@ export const createUser = async (req, res) => {
     const { name, username, password, roleId, officeId, asociadoId } = req.body;
     try {
         const newUser = await User.create({
+            id: generateUniqueId('user'),
             id: `user-${Date.now()}`,
             name,
             username,

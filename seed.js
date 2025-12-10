@@ -40,9 +40,27 @@ const seedDatabase = async () => {
     
     // El rol Contador solo tiene acceso a dashboard y al módulo contable completo
     const contablePermissions = ALL_PERMISSION_KEYS.filter(key => key.includes('libro-contable'));
-    const contadorPermissions = {
+   const contadorPermissions = {
+        // Vistas esenciales (Dashboard y contables)
         'dashboard.view': true,
         ...contablePermissions.reduce((acc, key) => ({ ...acc, [key]: true }), {}),
+        
+        // Permisos de SOLO LECTURA a entidades básicas (Catálogos y Tablas Maestras)
+        'offices.view': true,
+        'categories.view': true,
+        'shipping-types.view': true,
+        'payment-methods.view': true,
+        'clientes.view': true,
+        'proveedores.view': true,
+        'flota.view': true,        // Necesario para ver el vehículo en los gastos/remesas
+        'invoices.view': true,     // Necesario para ver facturas relacionadas con asientos
+        'configuracion.view': true, // Necesario para ver el Plan de Cuentas (cuentas-contables)
+        
+        // Permiso para listar roles (Necesario en el frontend para crear/editar usuarios si fuera necesario)
+        // Nota: El endpoint GET /roles requiere el permiso de 'manage', que es muy amplio. 
+        // Se añade el permiso completo por compatibilidad con la ruta, pero si se desea más seguridad,
+        // se debe modificar el middleware 'authorize' en roles.routes.js para usar un permiso más granular.
+        'config.roles.manage': true, 
     };
 
     // El rol Operador incluye todos sus permisos anteriores más los permisos de acción de proveedores.
