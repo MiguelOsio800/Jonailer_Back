@@ -38,32 +38,37 @@ const seedDatabase = async () => {
     // El rol Soporte Técnico tiene todos los permisos (igual que Admin)
     const techPermissions = { ...adminPermissions };
     
-    // El rol Contador solo tiene acceso a dashboard y al módulo contable completo
-    const contablePermissions = ALL_PERMISSION_KEYS.filter(key => key.includes('libro-contable'));
-   const contadorPermissions = {
-        // Vistas esenciales (Dashboard y contables)
+    // Filtramos todos los permisos relacionados con Contabilidad/Libro Contable
+    // Nota: Esto ya incluye libro-contable.view, create, edit, delete.
+    const contablePermissionsRaw = ALL_PERMISSION_KEYS.filter(key => key.includes('libro-contable'));
+    
+    // CORRECCIÓN/AJUSTE SOLICITADO: Definición del Rol Contador
+    const contadorPermissions = {
         'dashboard.view': true,
-        ...contablePermissions.reduce((acc, key) => ({ ...acc, [key]: true }), {}),
+        // **INCLUSIÓN COMPLETA DEL MÓDULO CONTABLE SOLICITADO**
+        ...contablePermissionsRaw.reduce((acc, key) => ({ ...acc, [key]: true }), {}),
         
-        // Permisos de SOLO LECTURA a entidades básicas (Catálogos y Tablas Maestras)
+        // Permisos de SOLO LECTURA a entidades básicas (Solución a los 403 originales)
         'offices.view': true,
         'categories.view': true,
         'shipping-types.view': true,
         'payment-methods.view': true,
         'clientes.view': true,
         'proveedores.view': true,
-        'flota.view': true,        // Necesario para ver el vehículo en los gastos/remesas
-        'invoices.view': true,     // Necesario para ver facturas relacionadas con asientos
-        'configuracion.view': true, // Necesario para ver el Plan de Cuentas (cuentas-contables)
+        'flota.view': true,        
+        'invoices.view': true,     
+        'configuracion.view': true, 
         
-        // Permiso para listar roles (Necesario en el frontend para crear/editar usuarios si fuera necesario)
-        // Nota: El endpoint GET /roles requiere el permiso de 'manage', que es muy amplio. 
-        // Se añade el permiso completo por compatibilidad con la ruta, pero si se desea más seguridad,
-        // se debe modificar el middleware 'authorize' en roles.routes.js para usar un permiso más granular.
+        // Permiso necesario para la ruta GET /roles
         'config.roles.manage': true, 
+
+        // Dado que expense-categories usa libro-contable.view, ya está cubierto,
+        // pero incluiremos las categorías de bienes para tener una visión contable más completa.
+        'bienes-categorias.view': true, // Nuevo para catálogo de bienes
+        'inventario-bienes.view': true, // Nuevo para ver los bienes
     };
 
-    // El rol Operador incluye todos sus permisos anteriores más los permisos de acción de proveedores.
+    // El rol Operador original (Base para el Asistente)
     const operatorPermissions = {
         // --- Vistas Operativas ---
         'dashboard.view': true,
@@ -82,13 +87,15 @@ const seedDatabase = async () => {
         'invoices.changeStatus': true,
         'clientes.create': true,
         'clientes.edit': true,
+        'clientes.delete': true, // <--- AÑADIDO: Eliminar Clientes
+        'invoices.delete': true,
         
-        // **NUEVOS PERMISOS PARA OPERADOR (Proveedores)**
+        // Permisos de Proveedores
         'proveedores.create': true,
         'proveedores.edit': true,
         'proveedores.delete': true,
 
-        // --- Catálogos (SOLO LECTURA para que carguen los selectores) ---
+        // --- Catálogos (SOLO LECTURA) ---
         'categories.view': true,
         'shipping-types.view': true,
         'payment-methods.view': true,
@@ -96,14 +103,27 @@ const seedDatabase = async () => {
         'bienes-categorias.view': true,
         'reports.view': true,
     };
+    
+    // --- NUEVO ROL: ASISTENTE (Operador + Acceso Completo a Asociados) ---
+    const assistantPermissions = {
+        ...operatorPermissions,
+        // Acceso Completo al Módulo Asociados (Sustituye la restricción del Operador)
+        'asociados.view': true,
+        'asociados.create': true,
+        'asociados.edit': true,
+        'asociados.delete': true,
+        'asociados.pagos.create': true,
+        'asociados.pagos.delete': true,
+    };
 
     // --- 1. Roles y Permisos ---
     console.log('Sembrando Roles y Permisos...');
     await Role.bulkCreate([
         { id: 'role-admin', name: 'Administrador', permissions: adminPermissions },
         { id: 'role-op', name: 'Operador', permissions: operatorPermissions },
-        { id: 'role-cont', name: 'Contador', permissions: contadorPermissions }, // Nuevo rol Contador
-        { id: 'role-tech', name: 'Soporte Técnico', permissions: techPermissions }
+        { id: 'role-cont', name: 'Contador', permissions: contadorPermissions }, 
+        { id: 'role-tech', name: 'Soporte Técnico', permissions: techPermissions },
+        { id: 'role-ass', name: 'Asistente', permissions: assistantPermissions } // <--- NUEVO ROL ASISTENTE
     ], { updateOnDuplicate: ['name', 'permissions'] });
     console.log('Roles y permisos actualizados.');
 
@@ -139,8 +159,9 @@ const seedDatabase = async () => {
     await User.bulkCreate([
         { id: 'user-admin', name: 'Administrador Principal', username: 'admin', password: hashedPassword, roleId: 'role-admin', officeId: 'office-caracas' },
         { id: 'user-operador', name: 'Juan Operador', username: 'operador', password: hashedPassword, roleId: 'role-op', officeId: 'office-valencia' },
-        { id: 'user-contador', name: 'Contador Ejemplo', username: 'contador', password: hashedPassword, roleId: 'role-cont', officeId: 'office-caracas' }, // Nuevo usuario Contador
-        { id: 'user-tech', name: 'Soporte Ejemplo', username: 'soporte', password: hashedPassword, roleId: 'role-tech', officeId: 'office-caracas' } // Nuevo usuario Soporte
+        { id: 'user-contador', name: 'Contador Ejemplo', username: 'contador', password: hashedPassword, roleId: 'role-cont', officeId: 'office-caracas' }, 
+        { id: 'user-tech', name: 'Soporte Ejemplo', username: 'soporte', password: hashedPassword, roleId: 'role-tech', officeId: 'office-caracas' }, 
+        { id: 'user-ass', name: 'Asistente Ejemplo', username: 'asistente', password: hashedPassword, roleId: 'role-ass', officeId: 'office-caracas' } // <--- NUEVO USUARIO ASISTENTE
     ], { updateOnDuplicate: ['name', 'password', 'roleId', 'officeId'] });
     console.log('Usuarios sembrados.');
 
@@ -204,12 +225,10 @@ const seedDatabase = async () => {
     ], { updateOnDuplicate: ['name', 'purchaseValue', 'officeId', 'categoryId'] });
     console.log('Entidades dependientes sembradas.');
 
-    // --- 8. Plan de Cuentas Contables (ELIMINADO A PETICIÓN DEL USUARIO) ---
+    // --- 8. Plan de Cuentas Contables (Omite la siembra) ---
     console.log('Omite la siembra del Plan de Cuentas Contables.');
-    // La sección de CuentaContable.bulkCreate ha sido eliminada.
 
-    // --- 9. Asiento Manual de Ejemplo (ELIMINADO A PETICIÓN DEL USUARIO) ---
-    // La sección de AsientoManual y AsientoManualEntry ha sido eliminada porque dependía del Plan de Cuentas.
+    // --- 9. Asiento Manual de Ejemplo (Omite la siembra) ---
     console.log('Omite la siembra del Asiento Manual de ejemplo por dependencia con Plan de Cuentas Contables.');
 
     console.log('Siembra de datos completada exitosamente.');
@@ -217,8 +236,9 @@ const seedDatabase = async () => {
   } catch (error) {
     console.error('Error durante la siembra de datos:', error);
   } finally {
-    await sequelize.close();
-    console.log('Conexión con la base de datos cerrada.');
+    // Es buena práctica cerrar la conexión de la base de datos después de la siembra
+    // await sequelize.close(); 
+    // console.log('Conexión con la base de datos cerrada.');
   }
 };
 
