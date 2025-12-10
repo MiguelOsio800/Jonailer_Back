@@ -7,7 +7,7 @@ import {
 // Importante: Se necesita para encriptar la contraseña del usuario de prueba
 import bcrypt from 'bcryptjs';
 
-// (La lista de permisos queda igual...)
+// (La lista de permisos queda igual para definir el total de permisos disponibles)
 const ALL_PERMISSION_KEYS = [
     'dashboard.view', 'shipping-guide.view', 'invoices.view', 'invoices.create', 'invoices.edit', 
     'invoices.delete', 'invoices.void', 'invoices.changeStatus', 'flota.view', 'flota.create', 
@@ -32,9 +32,20 @@ const seedDatabase = async () => {
     // Sincroniza la base de datos, alterando las tablas si es necesario
     await sequelize.sync({ alter: true });
 
-    // (La sección de permisos queda igual...)
+    // --- Definición de Permisos para los 4 Roles ---
     const adminPermissions = ALL_PERMISSION_KEYS.reduce((acc, key) => ({ ...acc, [key]: true }), {});
+    
+    // El rol Soporte Técnico tiene todos los permisos (igual que Admin)
     const techPermissions = { ...adminPermissions };
+    
+    // El rol Contador solo tiene acceso a dashboard y al módulo contable completo
+    const contablePermissions = ALL_PERMISSION_KEYS.filter(key => key.includes('libro-contable'));
+    const contadorPermissions = {
+        'dashboard.view': true,
+        ...contablePermissions.reduce((acc, key) => ({ ...acc, [key]: true }), {}),
+    };
+
+    // El rol Operador incluye todos sus permisos anteriores más los permisos de acción de proveedores.
     const operatorPermissions = {
         // --- Vistas Operativas ---
         'dashboard.view': true,
@@ -44,8 +55,8 @@ const seedDatabase = async () => {
         'remesas.view': true,
         'asociados.view': true,
         'clientes.view': true,
-        'proveedores.view': true, // Necesario para evitar 403 en proveedores
-        'inventario-bienes.view': true, // Necesario para evitar 403 en activos
+        'proveedores.view': true,
+        'inventario-bienes.view': true,
         
         // --- Permisos de Acción ---
         'invoices.create': true,
@@ -54,6 +65,11 @@ const seedDatabase = async () => {
         'clientes.create': true,
         'clientes.edit': true,
         
+        // **NUEVOS PERMISOS PARA OPERADOR (Proveedores)**
+        'proveedores.create': true,
+        'proveedores.edit': true,
+        'proveedores.delete': true,
+
         // --- Catálogos (SOLO LECTURA para que carguen los selectores) ---
         'categories.view': true,
         'shipping-types.view': true,
@@ -68,6 +84,7 @@ const seedDatabase = async () => {
     await Role.bulkCreate([
         { id: 'role-admin', name: 'Administrador', permissions: adminPermissions },
         { id: 'role-op', name: 'Operador', permissions: operatorPermissions },
+        { id: 'role-cont', name: 'Contador', permissions: contadorPermissions }, // Nuevo rol Contador
         { id: 'role-tech', name: 'Soporte Técnico', permissions: techPermissions }
     ], { updateOnDuplicate: ['name', 'permissions'] });
     console.log('Roles y permisos actualizados.');
@@ -78,8 +95,9 @@ const seedDatabase = async () => {
         where: { id: 1 },
         defaults: {
             id: 1,
-            name: 'Transporte Alianza C.A.',
-            rif: 'J-12345678-9',
+            // **NOMBRE DE LA EMPRESA ACTUALIZADO**
+            name: 'Asociación Cooperativa Mixta Fraternidad Del Transporte',
+            rif: 'J-123456789',
             address: 'Av. Principal, Edificio Central, Piso 1, Caracas, Venezuela',
             phone: '0212-555-1234',
             costPerKg: 10.5,
@@ -102,7 +120,9 @@ const seedDatabase = async () => {
     const hashedPassword = await bcrypt.hash('123', 10);
     await User.bulkCreate([
         { id: 'user-admin', name: 'Administrador Principal', username: 'admin', password: hashedPassword, roleId: 'role-admin', officeId: 'office-caracas' },
-        { id: 'user-operador', name: 'Juan Operador', username: 'operador', password: hashedPassword, roleId: 'role-op', officeId: 'office-valencia' }
+        { id: 'user-operador', name: 'Juan Operador', username: 'operador', password: hashedPassword, roleId: 'role-op', officeId: 'office-valencia' },
+        { id: 'user-contador', name: 'Contador Ejemplo', username: 'contador', password: hashedPassword, roleId: 'role-cont', officeId: 'office-caracas' }, // Nuevo usuario Contador
+        { id: 'user-tech', name: 'Soporte Ejemplo', username: 'soporte', password: hashedPassword, roleId: 'role-tech', officeId: 'office-caracas' } // Nuevo usuario Soporte
     ], { updateOnDuplicate: ['name', 'password', 'roleId', 'officeId'] });
     console.log('Usuarios sembrados.');
 
@@ -143,8 +163,8 @@ const seedDatabase = async () => {
     ], { updateOnDuplicate: ['name', 'phone', 'address', 'clientType'] });
 
     await Supplier.bulkCreate([
-        { id: 'supp-1', idNumber: 'J-11223344-5', name: 'Repuestos El Gato', phone: '0212-1112233', address: 'Quinta Crespo' },
-        { id: 'supp-2', idNumber: 'J-55667788-9', name: 'Papelería El Lápiz', phone: '0212-4445566', address: 'Sabana Grande' }
+        { id: 'supp-1', idNumber: 'J-112233445', name: 'Repuestos El Gato', phone: '0212-1112233', address: 'Quinta Crespo' },
+        { id: 'supp-2', idNumber: 'J-556677889', name: 'Papelería El Lápiz', phone: '0212-4445566', address: 'Sabana Grande' }
     ], { updateOnDuplicate: ['name', 'phone', 'address'] });
 
     await Asociado.bulkCreate([
@@ -166,131 +186,14 @@ const seedDatabase = async () => {
     ], { updateOnDuplicate: ['name', 'purchaseValue', 'officeId', 'categoryId'] });
     console.log('Entidades dependientes sembradas.');
 
-    // --- 8. Plan de Cuentas Contables ---
-    console.log('Sembrando Plan de Cuentas...');
-    await CuentaContable.bulkCreate([
-        // 1. ACTIVO
-        { codigo: '1.1.01.00001', nombre: 'EFECTIVO POR DEPOSITAR', tipo: 'Activo' },
-        { codigo: '1.1.02.00001', nombre: 'BANCO BANESCO 5215', tipo: 'Activo' },
-        { codigo: '1.1.02.00002', nombre: 'BANCO BANESCO 7227', tipo: 'Activo' },
-        { codigo: '1.1.02.00003', nombre: 'BANCO PROVINCIAL 8725', tipo: 'Activo' },
-        { codigo: '1.1.02.00004', nombre: 'BANCO PROVINCIAL 6795', tipo: 'Activo' },
-        { codigo: '1.1.03.01001', nombre: 'CUENTAS POR COBRAR MERIDA TERMINAL', tipo: 'Activo' },
-        { codigo: '1.1.03.01002', nombre: 'CUENTAS POR COBRAR MERIDA DEPOSITO', tipo: 'Activo' },
-        { codigo: '1.1.03.01003', nombre: 'CUENTAS POR COBRAR SAN CRISTOBAL', tipo: 'Activo' },
-        { codigo: '1.1.03.01004', nombre: 'CUENTAS POR COBRAR VALENCIA', tipo: 'Activo' },
-        { codigo: '1.1.03.01005', nombre: 'CUENTAS POR COBRAR VALERA', tipo: 'Activo' },
-        { codigo: '1.1.03.01006', nombre: 'CUENTAS POR COBRAR BARINAS', tipo: 'Activo' },
-        { codigo: '1.1.03.01007', nombre: 'CUENTAS POR COBRAR BARQUISIMETO', tipo: 'Activo' },
-        { codigo: '1.1.03.02001', nombre: 'CUENTAS POR COBRAR CLIENTES', tipo: 'Activo' },
-        { codigo: '1.1.03.03001', nombre: 'APORTES POR COBRAR ASOCIADOS', tipo: 'Activo' },
-        { codigo: '1.1.03.04001', nombre: 'CUENTAS POR COBRAR ASOCIADOS', tipo: 'Activo' },
-        { codigo: '1.1.03.05001', nombre: 'OTRAS CUENTAS POR COBRAR', tipo: 'Activo' },
-        { codigo: '1.1.04.00001', nombre: 'ISLR ANTICIPADO', tipo: 'Activo' },
-        { codigo: '1.1.04.00002', nombre: 'ANTICIPOS DE DIETAS', tipo: 'Activo' },
-        { codigo: '1.2.01.0001', nombre: 'INMUEBLES', tipo: 'Activo' },
-        { codigo: '1.2.01.0002', nombre: 'VEHICULOS', tipo: 'Activo' },
-        { codigo: '1.2.01.0003', nombre: 'EQUIPOS DE COMPUTACION', tipo: 'Activo' },
-        { codigo: '1.2.01.0004', nombre: 'MOBILIARIO', tipo: 'Activo' },
-        { codigo: '1.2.01.0005', nombre: 'OTROS EQUIPOS DE OFICINA', tipo: 'Activo' },
-        { codigo: '1.2.02.0001', nombre: 'IVA CREDITO FISCAL', tipo: 'Activo' },
-        { codigo: '1.2.02.0002', nombre: 'SISTEMA ADMINISTRATIVO', tipo: 'Activo' },
+    // --- 8. Plan de Cuentas Contables (ELIMINADO A PETICIÓN DEL USUARIO) ---
+    console.log('Omite la siembra del Plan de Cuentas Contables.');
+    // La sección de CuentaContable.bulkCreate ha sido eliminada.
 
-        // 2. PASIVO
-        { codigo: '2.1.01.00001', nombre: 'APORTES LEGALES POR PAGAR', tipo: 'Pasivo' },
-        { codigo: '2.1.01.00002', nombre: 'SERVICIOS BÁSICOS POR PAGAR', tipo: 'Pasivo' },
-        { codigo: '2.1.01.00003', nombre: 'FRANQUEO POSTAL POR PAGAR', tipo: 'Pasivo' },
-        { codigo: '2.1.01.00004', nombre: 'REMESAS POR PAGAR', tipo: 'Pasivo' },
-        { codigo: '2.1.01.00005', nombre: 'REMESAS POR PAGAR POR COBROS A DESTINO', tipo: 'Pasivo' },
-        { codigo: '2.1.01.00006', nombre: 'DIETAS POR PAGAR A JUNTA DIRECTIVA', tipo: 'Pasivo' },
-        { codigo: '2.2.01.00001', nombre: 'DEP. ACUMULADA DE INMUEBLES', tipo: 'Pasivo' },
-        { codigo: '2.2.01.00002', nombre: 'DEP. ACUMULADA DE VEHICULOS', tipo: 'Pasivo' },
-        { codigo: '2.2.01.00003', nombre: 'DEP. ACUMULADA DE COMPUTACION', tipo: 'Pasivo' },
-        { codigo: '2.2.01.00004', nombre: 'DEP. ACUMULADA DE MOBILIARIO', tipo: 'Pasivo' },
-        { codigo: '2.2.01.00005', nombre: 'DEP. ACUMULADA DE EQUIPOS DE OFICINA', tipo: 'Pasivo' },
+    // --- 9. Asiento Manual de Ejemplo (ELIMINADO A PETICIÓN DEL USUARIO) ---
+    // La sección de AsientoManual y AsientoManualEntry ha sido eliminada porque dependía del Plan de Cuentas.
+    console.log('Omite la siembra del Asiento Manual de ejemplo por dependencia con Plan de Cuentas Contables.');
 
-        // 3. PATRIMONIO
-        { codigo: '3.1.01.00001', nombre: 'CERTIFICADOS', tipo: 'Patrimonio' },
-        { codigo: '3.1.01.00002', nombre: 'APORTES DE ASOCIADOS', tipo: 'Patrimonio' },
-        { codigo: '3.1.01.00003', nombre: 'AJUSTES REVALUACION DE PROPIEDADES', tipo: 'Patrimonio' },
-        { codigo: '3.2.01.00001', nombre: 'RESERVA EMERGENCIAS', tipo: 'Patrimonio' },
-        { codigo: '3.2.01.00002', nombre: 'FONDOS DE PROTECCION', tipo: 'Patrimonio' },
-        { codigo: '3.2.01.00003', nombre: 'FONDO DE EDUCACION', tipo: 'Patrimonio' },
-        { codigo: '3.3.01.00001', nombre: 'RESULTADOS DEL EJERCICIO', tipo: 'Patrimonio' },
-
-        // 4. INGRESOS
-        { codigo: '4.1.01.00001', nombre: 'INGRESOS ENC. OFIC. CARACAS', tipo: 'Ingreso' },
-        { codigo: '4.1.01.00002', nombre: 'INGRESOS ENC. OFIC. MERIDA TERMINAL', tipo: 'Ingreso' },
-        { codigo: '4.1.01.00003', nombre: 'INGRESOS ENC. OFIC. MERIDA DEPOSITO', tipo: 'Ingreso' },
-        { codigo: '4.1.01.00004', nombre: 'INGRESOS ENC. OFIC. SAN CRISTOBAL', tipo: 'Ingreso' },
-        { codigo: '4.1.01.00005', nombre: 'INGRESOS ENC. OFIC. VALERA', tipo: 'Ingreso' },
-        { codigo: '4.1.01.00006', nombre: 'INGRESOS ENC. OFIC. VALENCIA', tipo: 'Ingreso' },
-        { codigo: '4.1.01.00007', nombre: 'INGRESOS ENC. OFIC. BARINAS', tipo: 'Ingreso' },
-        { codigo: '4.1.01.00008', nombre: 'INGRESOS ENC. OFIC. BARQUISIMETO', tipo: 'Ingreso' },
-        { codigo: '4.2.01.00001', nombre: 'OTROS INGRESOS', tipo: 'Ingreso' },
-
-        // 5. GASTOS (Costos y Gastos)
-        { codigo: '5.1.01.00001', nombre: 'SERVICIOS ASOEXPRES', tipo: 'Gasto' },
-        { codigo: '5.1.01.00002', nombre: 'COMBUSTIBLE', tipo: 'Gasto' },
-        { codigo: '5.1.01.00003', nombre: 'MMTO Y REPARACION DE VEHICULOS', tipo: 'Gasto' },
-        { codigo: '5.1.01.00004', nombre: 'FRANQUEO POSTAL', tipo: 'Gasto' },
-        { codigo: '5.1.01.00005', nombre: 'OTROS GASTOS IPOSTEL', tipo: 'Gasto' },
-        { codigo: '5.1.01.00006', nombre: 'PERMISOLOGIAS', tipo: 'Gasto' },
-        { codigo: '5.1.01.00007', nombre: 'BONO DE PRODUCCION', tipo: 'Gasto' },
-        { codigo: '5.2.01.00001', nombre: 'IVSS ASOCIADOS', tipo: 'Gasto' },
-        { codigo: '5.2.01.00002', nombre: 'DIETAS JUNTA DIRECTIVA', tipo: 'Gasto' },
-        { codigo: '5.2.01.00003', nombre: 'CORPOELEC', tipo: 'Gasto' },
-        { codigo: '5.2.01.00004', nombre: 'HIDROCAPITAL', tipo: 'Gasto' },
-        { codigo: '5.2.01.00005', nombre: 'CANTV', tipo: 'Gasto' },
-        { codigo: '5.2.01.00006', nombre: 'TELEFONIA CELULAR', tipo: 'Gasto' },
-        { codigo: '5.2.01.00007', nombre: 'FIBRA OPTICA', tipo: 'Gasto' },
-        { codigo: '5.2.01.00008', nombre: 'ALQUILERES DE OFICINA', tipo: 'Gasto' },
-        { codigo: '5.2.01.00009', nombre: 'SERVICIOS DE LIMPIEZA', tipo: 'Gasto' },
-        { codigo: '5.2.01.00010', nombre: 'VIATICOS Y PASAJES', tipo: 'Gasto' },
-        { codigo: '5.2.01.00011', nombre: 'MATERIALES ELECTRICOS', tipo: 'Gasto' },
-        { codigo: '5.2.01.00012', nombre: 'MATERIALES FERRETERIA', tipo: 'Gasto' },
-        { codigo: '5.2.01.00013', nombre: 'PAPELERIA Y ARTICULOS OFICINA', tipo: 'Gasto' },
-        { codigo: '5.2.01.00014', nombre: 'GASTOS GENERALES MTTO OFICINA', tipo: 'Gasto' },
-        { codigo: '5.2.01.00015', nombre: 'MTTO COMPUTACION', tipo: 'Gasto' },
-        { codigo: '5.2.01.00016', 'nombre': 'MTTO OTROS EQUIPOS', tipo: 'Gasto' },
-        { codigo: '5.2.01.00017', nombre: 'GASTOS LEGALES', tipo: 'Gasto' },
-        { codigo: '5.2.01.00018', nombre: 'IMPUESTOS MUNICIPALES', tipo: 'Gasto' },
-        { codigo: '5.2.01.00019', nombre: 'ISLR', tipo: 'Gasto' },
-        { codigo: '5.2.01.00020', nombre: 'HONORARIOS PROFESIONALES', tipo: 'Gasto' },
-        { codigo: '5.2.01.00021', nombre: 'ESTACIONAMIENTO', tipo: 'Gasto' },
-        { codigo: '5.2.01.00022', nombre: 'FACTURACION DIGITAL', tipo: 'Gasto' },
-        { codigo: '5.2.01.00023', nombre: 'OTROS GASTOS', tipo: 'Gasto' },
-        { codigo: '5.2.02.00001', nombre: 'COMISIONES BANESCO 5215', tipo: 'Gasto' },
-        { codigo: '5.2.02.00002', nombre: 'COMISIONES BANESCO 7227', tipo: 'Gasto' },
-        { codigo: '5.2.02.00003', nombre: 'COMISIONES PROVINCIAL 8725', tipo: 'Gasto' },
-        { codigo: '5.2.02.00004', nombre: 'COMISIONES PROVINCIAL 6795', tipo: 'Gasto' },
-    ], { updateOnDuplicate: ['nombre', 'tipo', 'codigo'] });
-    console.log('Plan de cuentas sembrado.');
-
-    // --- 9. Asiento Manual de Ejemplo ---
-    console.log('Sembrando Asiento Manual de ejemplo...');
-    const [asiento, created] = await AsientoManual.findOrCreate({
-        where: { id: 'am-seed-1' },
-        defaults: {
-            id: 'am-seed-1',
-            fecha: new Date(),
-            descripcion: 'Asiento de apertura de caja',
-            userId: 'user-admin'
-        }
-    });
-    if (created) {
-        // CORRECCIÓN: Buscar las cuentas por su código para obtener sus IDs UUID reales.
-        const cuentaCaja = await CuentaContable.findOne({ where: { codigo: '1.1.01.00001' } }); // EFECTIVO POR DEPOSITAR
-        const cuentaBancos = await CuentaContable.findOne({ where: { codigo: '1.1.02.00001' } }); // BANCO BANESCO 5215
-
-        await AsientoManualEntry.bulkCreate([
-            { id: 'ame-1', asientoManualId: asiento.id, cuentaId: cuentaCaja.id, debe: 500.00, haber: 0.00 },
-            { id: 'ame-2', asientoManualId: asiento.id, cuentaId: cuentaBancos.id, debe: 0.00, haber: 500.00 }
-        ]);
-        console.log('Asiento manual de ejemplo creado.');
-    } else {
-        console.log('Asiento manual de ejemplo ya existía.');
-    }
     console.log('Siembra de datos completada exitosamente.');
 
   } catch (error) {
