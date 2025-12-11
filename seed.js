@@ -39,16 +39,15 @@ const seedDatabase = async () => {
     const techPermissions = { ...adminPermissions };
     
     // Filtramos todos los permisos relacionados con Contabilidad/Libro Contable
-    // Nota: Esto ya incluye libro-contable.view, create, edit, delete.
     const contablePermissionsRaw = ALL_PERMISSION_KEYS.filter(key => key.includes('libro-contable'));
     
-    // CORRECCIÓN/AJUSTE SOLICITADO: Definición del Rol Contador
+    // Definición del Rol Contador
     const contadorPermissions = {
         'dashboard.view': true,
-        // **INCLUSIÓN COMPLETA DEL MÓDULO CONTABLE SOLICITADO**
+        // INCLUSIÓN COMPLETA DEL MÓDULO CONTABLE 
         ...contablePermissionsRaw.reduce((acc, key) => ({ ...acc, [key]: true }), {}),
         
-        // Permisos de SOLO LECTURA a entidades básicas (Solución a los 403 originales)
+        // Permisos de SOLO LECTURA a entidades básicas
         'offices.view': true,
         'categories.view': true,
         'shipping-types.view': true,
@@ -58,17 +57,12 @@ const seedDatabase = async () => {
         'flota.view': true,        
         'invoices.view': true,     
         'configuracion.view': true, 
-        
-        // Permiso necesario para la ruta GET /roles
         'config.roles.manage': true, 
-
-        // Dado que expense-categories usa libro-contable.view, ya está cubierto,
-        // pero incluiremos las categorías de bienes para tener una visión contable más completa.
-        'bienes-categorias.view': true, // Nuevo para catálogo de bienes
-        'inventario-bienes.view': true, // Nuevo para ver los bienes
+        'bienes-categorias.view': true, 
+        'inventario-bienes.view': true, 
     };
 
-    // El rol Operador original (Base para el Asistente)
+    // El rol Operador 
     const operatorPermissions = {
         // --- Vistas Operativas ---
         'dashboard.view': true,
@@ -87,7 +81,7 @@ const seedDatabase = async () => {
         'invoices.changeStatus': true,
         'clientes.create': true,
         'clientes.edit': true,
-        'clientes.delete': true, // <--- AÑADIDO: Eliminar Clientes
+        'clientes.delete': true, 
         'invoices.delete': true,
         
         // Permisos de Proveedores
@@ -104,17 +98,17 @@ const seedDatabase = async () => {
         'reports.view': true,
     };
     
-    // --- NUEVO ROL: ASISTENTE (Operador + Acceso Completo a Asociados) ---
-    const assistantPermissions = {
-        ...operatorPermissions,
-        // Acceso Completo al Módulo Asociados (Sustituye la restricción del Operador)
-        'asociados.view': true,
-        'asociados.create': true,
-        'asociados.edit': true,
-        'asociados.delete': true,
-        'asociados.pagos.create': true,
-        'asociados.pagos.delete': true,
-    };
+    // --- ROL ASISTENTE (NUEVA DEFINICIÓN SOLICITADA: Acceso Total, excepto edición/gestión en Configuración/Auditoría) ---
+    // 1. Inicia con todos los permisos (Acceso Total)
+    const assistantPermissions = ALL_PERMISSION_KEYS.reduce((acc, key) => ({ ...acc, [key]: true }), {});
+    
+    // 2. Revocar permisos de edición/gestión en Configuración y Auditoría (dejando solo 'view')
+    // Los permisos 'auditoria.view' y 'configuracion.view' ya están en true.
+    assistantPermissions['config.company.edit'] = false;
+    assistantPermissions['config.users.manage'] = false;
+    assistantPermissions['config.users.edit_protected'] = false;
+    assistantPermissions['config.users.manage_tech_users'] = false;
+    assistantPermissions['config.roles.manage'] = false; 
 
     // --- 1. Roles y Permisos ---
     console.log('Sembrando Roles y Permisos...');
@@ -123,7 +117,7 @@ const seedDatabase = async () => {
         { id: 'role-op', name: 'Operador', permissions: operatorPermissions },
         { id: 'role-cont', name: 'Contador', permissions: contadorPermissions }, 
         { id: 'role-tech', name: 'Soporte Técnico', permissions: techPermissions },
-        { id: 'role-ass', name: 'Asistente', permissions: assistantPermissions } // <--- NUEVO ROL ASISTENTE
+        { id: 'role-ass', name: 'Asistente', permissions: assistantPermissions }
     ], { updateOnDuplicate: ['name', 'permissions'] });
     console.log('Roles y permisos actualizados.');
 
@@ -133,11 +127,11 @@ const seedDatabase = async () => {
         where: { id: 1 },
         defaults: {
             id: 1,
-            // **NOMBRE DE LA EMPRESA ACTUALIZADO**
+            // NOMBRE DE LA EMPRESA ACTUALIZADO
             name: 'Asociación Cooperativa Mixta Fraternidad Del Transporte',
-            rif: 'J-123456789',
-            address: 'Av. Principal, Edificio Central, Piso 1, Caracas, Venezuela',
-            phone: '0212-555-1234',
+            rif: 'J-001841814',
+            address: 'DOMICILIO FISCAL ESQ CEDEÑO QTA FRATERNIDAD DEL TRANSPORTE NRO 42, URB SANAGUSTIN DEL NORTE CARACAS DISTRITO CAPITAL, ZONA POSTAL 1010',
+            phone: '04122834589',
             costPerKg: 10.5,
             bcvRate: 36.50,
             lastInvoiceNumber: 1,
@@ -145,23 +139,58 @@ const seedDatabase = async () => {
     });
     console.log('Información de la empresa verificada o creada.');
 
-    // --- 3. Oficinas ---
+    // --- 3. Oficinas (Actualizada con los datos de distribución) ---
     console.log('Sembrando Oficinas...');
     await Office.bulkCreate([
-        { id: 'office-caracas', code: 'A', name: 'Oficina Principal - Caracas', address: 'Av. Urdaneta, Caracas', phone: '0212-111-2233' },
-        { id: 'office-valencia', code: 'C', name: 'Sucursal Valencia', address: 'Zona Industrial, Valencia', phone: '0241-444-5566' }
+        // Oficinas Actualizadas y Nuevas de la Distribución
+        { id: 'office-caracas', code: 'A', name: 'OFICINA SEDE CARACAS', address: 'OFICINA SEDE CARACAS', phone: '0212-111-2233' },
+        { id: 'office-terminal-bandera', code: 'B', name: 'OFICINA TERMINAL LA BANDERA', address: 'OFICINA TERMINAL LA BANDERA', phone: 'N/A' },
+        { id: 'office-valencia', code: 'C', name: 'OFICINA VALENCIA DEPOSITO', address: 'OFICINA VALENCIA DEPOSITO', phone: '0241-444-5566' },
+        { id: 'office-barquisimeto-deposito', code: 'D', name: 'OFICINA BARQUISIMETO DEPOSITO', address: 'OFICINA BARQUISIMETO DEPOSITO', phone: 'N/A' },
+        { id: 'office-terminal-maracaibo', code: 'E', name: 'OFICINA TERMINAL MARACAIBO', address: 'OFICINA TERMINAL MARACAIBO', phone: 'N/A' },
+        { id: 'office-maracaibo-deposito', code: 'F', name: 'OFICINA MARACAIBO DEPOSITO', address: 'OFICINA MARACAIBO DEPOSITO', phone: 'N/A' },
+        { id: 'office-terminal-valera', code: 'G', name: 'OFICINA TERMINAL VALERA', address: 'OFICINA TERMINAL VALERA', phone: 'N/A' },
+        { id: 'office-terminal-barinas', code: 'H', name: 'OFICINA TERMINAL BARINAS', address: 'OFICINA TERMINAL BARINAS', phone: 'N/A' },
+        { id: 'office-terminal-guanare', code: 'I', name: 'OFICINA TERMINAL GUANARE', address: 'OFICINA TERMINAL GUANARE', phone: 'N/A' },
+        { id: 'office-terminal-bocono', code: 'J', name: 'OFICINA TERMINAL BOCONO', address: 'OFICINA TERMINAL BOCONO', phone: 'N/A' },
+        { id: 'office-terminal-merida', code: 'K', name: 'OFICINA TERMINAL MÉRIDA', address: 'OFICINA TERMINAL MÉRIDA', phone: 'N/A' },
+        { id: 'office-merida-deposito', code: 'L', name: 'OFICINA MÉRIDA DEPOSITO', address: 'OFICINA MÉRIDA DEPOSITO', phone: 'N/A' },
+        { id: 'office-terminal-sancristobal', code: 'M', name: 'OFICINA TERMINAL SAN CRISTOBAL', address: 'OFICINA TERMINAL SAN CRISTOBAL', phone: 'N/A' },
+        { id: 'office-sancristobal-deposito', code: 'N', name: 'OFICINA SAN CRISTOBAL DEPOSITO', address: 'OFICINA SAN CRISTOBAL DEPOSITO', phone: 'N/A' }
     ], { updateOnDuplicate: ['name', 'address', 'phone', 'code'] });
     console.log('Oficinas sembradas.');
 
-    // --- 4. Usuarios ---
+    // --- 4. Usuarios (Actualizada con el listado del CSV) ---
     console.log('Sembrando Usuarios...');
+    // Se mantiene el uso de una única contraseña hasheada ('123') para todos los usuarios de siembra
+    // para simplificar y alinear con el script original.
     const hashedPassword = await bcrypt.hash('123', 10);
+    
     await User.bulkCreate([
-        { id: 'user-admin', name: 'Administrador Principal', username: 'admin', password: hashedPassword, roleId: 'role-admin', officeId: 'office-caracas' },
-        { id: 'user-operador', name: 'Juan Operador', username: 'operador', password: hashedPassword, roleId: 'role-op', officeId: 'office-valencia' },
-        { id: 'user-contador', name: 'Contador Ejemplo', username: 'contador', password: hashedPassword, roleId: 'role-cont', officeId: 'office-caracas' }, 
-        { id: 'user-tech', name: 'Soporte Ejemplo', username: 'soporte', password: hashedPassword, roleId: 'role-tech', officeId: 'office-caracas' }, 
-        { id: 'user-ass', name: 'Asistente Ejemplo', username: 'asistente', password: hashedPassword, roleId: 'role-ass', officeId: 'office-caracas' } // <--- NUEVO USUARIO ASISTENTE
+        // Usuarios del CSV (La oficina 'TOTAL' se mapea a 'office-caracas')
+        { id: 'user-dcruz', name: 'DARLIN CRUZ', username: 'dcruz', password: hashedPassword, roleId: 'role-op', officeId: 'office-caracas' },
+        { id: 'user-drojas', name: 'DORIAN ROJAS', username: 'drojas', password: hashedPassword, roleId: 'role-ass', officeId: 'office-caracas' },
+        { id: 'user-agarcia', name: 'ALEXANDER GARCIA', username: 'agarcia', password: hashedPassword, roleId: 'role-admin', officeId: 'office-caracas' },
+        { id: 'user-nsotillo', name: 'NANCY SOTILLO', username: 'nsotillo', password: hashedPassword, roleId: 'role-op', officeId: 'office-caracas' },
+        { id: 'user-mdaboin', name: 'MARLENE DABOIN', username: 'mdaboin', password: hashedPassword, roleId: 'role-op', officeId: 'office-barquisimeto-deposito' },
+        { id: 'user-hcastillo', name: 'HAIKEL CASTILLO', username: 'hcastillo', password: hashedPassword, roleId: 'role-op', officeId: 'office-terminal-barinas' },
+        { id: 'user-lcontreras', name: 'LENIS CONTRERAS', username: 'lcontreras', password: hashedPassword, roleId: 'role-op', officeId: 'office-maracaibo-deposito' },
+        { id: 'user-fandrade', name: 'FRANK ANDRADE', username: 'fandrade', password: hashedPassword, roleId: 'role-op', officeId: 'office-merida-deposito' },
+        { id: 'user-psalas', name: 'PEDRO SALAS', username: 'psalas', password: hashedPassword, roleId: 'role-op', officeId: 'office-terminal-merida' },
+        { id: 'user-rramirez', name: 'RICHARD RAMIREZ', username: 'rramirez', password: hashedPassword, roleId: 'role-op', officeId: 'office-terminal-merida' },
+        { id: 'user-crodriguez', name: 'CARLOS RODRIGUEZ', username: 'crodriguez', password: hashedPassword, roleId: 'role-op', officeId: 'office-sancristobal-deposito' },
+        { id: 'user-nquintero', name: 'NORA QUINTERO', username: 'nquintero', password: hashedPassword, roleId: 'role-op', officeId: 'office-terminal-valera' },
+        { id: 'user-jhernandez', name: 'JOSTON HERNANDEZ', username: 'jhernandez', password: hashedPassword, roleId: 'role-admin', officeId: 'office-caracas' },
+        { id: 'user-jrodriguez', name: 'JOSE RODRIGUEZ', username: 'jrodriguez', password: hashedPassword, roleId: 'role-admin', officeId: 'office-caracas' },
+        { id: 'user-hlarez', name: 'HOWARD LAREZ', username: 'hlarez', password: hashedPassword, roleId: 'role-op', officeId: 'office-terminal-bandera' },
+        { id: 'user-rpalencia', name: 'ROWGELIS PALENCIA', username: 'rpalencia', password: hashedPassword, roleId: 'role-op', officeId: 'office-valencia' },
+        { id: 'user-hcastillo2', name: 'HIGINIA CASTILLO', username: 'hcastillo2', password: hashedPassword, roleId: 'role-op', officeId: 'office-terminal-barinas' }, // Se ajusta el username por duplicidad (hcastillo -> hcastillo2)
+        { id: 'user-cdelgado', name: 'CARLOS DELGADO', username: 'cdelgado', password: hashedPassword, roleId: 'role-op', officeId: 'office-terminal-guanare' },
+        { id: 'user-cduran', name: 'CARLOS DURAN', username: 'cduran', password: hashedPassword, roleId: 'role-cont', officeId: 'office-caracas' },
+        { id: 'user-ccampos', name: 'CAROLINA CAMPOS', username: 'ccampos', password: hashedPassword, roleId: 'role-cont', officeId: 'office-caracas' },
+        // Usuarios de Soporte y Admin (actualizados con datos del CSV)
+        { id: 'user-soporte', name: 'SOPORTE', username: 'soporte', password: hashedPassword, roleId: 'role-tech', officeId: 'office-caracas' },
+        { id: 'user-admin', name: 'ADMIN', username: 'admin', password: hashedPassword, roleId: 'role-admin', officeId: 'office-caracas' }
     ], { updateOnDuplicate: ['name', 'password', 'roleId', 'officeId'] });
     console.log('Usuarios sembrados.');
 
