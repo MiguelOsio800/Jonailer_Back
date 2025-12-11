@@ -49,6 +49,7 @@ app.use(morgan('combined'));
 // --- Configuración de CORS ---
 // Lista de orígenes permitidos.
 const allowedOrigins = [
+  'http://api.fraternidad.local',
   'http://localhost:3000',
   'http://localhost:5173',
   'https://4wt9b8zl-5000.use2.devtunnels.ms', // Tu backend
