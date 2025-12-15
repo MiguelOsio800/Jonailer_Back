@@ -32,7 +32,7 @@ const seedDatabase = async () => {
     // Sincroniza la base de datos, alterando las tablas si es necesario
     await sequelize.sync({ alter: true });
 
-    // --- Definición de Permisos para los 5 Roles ---
+    // --- Definición de Permisos para los Roles ---
     const adminPermissions = ALL_PERMISSION_KEYS.reduce((acc, key) => ({ ...acc, [key]: true }), {});
     
     // El rol Soporte Técnico tiene todos los permisos (igual que Admin)
@@ -98,20 +98,61 @@ const seedDatabase = async () => {
         'reports.view': true,
     };
     
-    // ROL ASISTENTE (Acceso Total, excepto edición/gestión en Configuración/Auditoría)
-    const assistantPermissions = ALL_PERMISSION_KEYS.reduce((acc, key) => ({ ...acc, [key]: true }), {});
+    // --- ROL ASISTENTE (ACTUALIZADO para permitir VIEW en Config/Audit y Asociados) ---
+    const assistantPermissions = {};
+    
+    // 1. Dar acceso completo al Módulo de Asociados (como Operador + Acceso Completo a Asociados)
+    Object.assign(assistantPermissions, operatorPermissions);
+    assistantPermissions['asociados.create'] = true;
+    assistantPermissions['asociados.edit'] = true;
+    assistantPermissions['asociados.delete'] = true;
+    assistantPermissions['asociados.pagos.create'] = true;
+    assistantPermissions['asociados.pagos.delete'] = true;
+
+    // 2. Asegurar vista de Configuración, Auditoría y Roles para la navegación (sin permisos de modificación)
+    assistantPermissions['configuracion.view'] = true; 
+    assistantPermissions['auditoria.view'] = true;
+    // Esto es necesario para que la interfaz cargue la lista de roles (resuelve 403 en /api/roles)
+    assistantPermissions['config.roles.manage'] = true; 
+    
+    // 3. Denegar explícitamente cualquier otra capacidad de modificación en Configuración
     assistantPermissions['config.company.edit'] = false;
     assistantPermissions['config.users.manage'] = false;
     assistantPermissions['config.users.edit_protected'] = false;
-    assistantPermissions['config.users.manage_tech_users'] = false;
-    assistantPermissions['config.roles.manage'] = false; 
+    assistantPermissions['config.users.manage_tech_users'] = false; 
 
-    // --- NUEVO ROL: Admin2 (SOLO LECTURA GLOBAL) ---
-    // Incluye solo los permisos que terminan en '.view' (o son vistas de alto nivel)
-    const admin2Permissions = ALL_PERMISSION_KEYS
-        .filter(key => key.endsWith('.view') || key === 'inventario.view' || key === 'inventario-envios.view')
-        .reduce((acc, key) => ({ ...acc, [key]: true }), {});
+    // --- ROL Admin2 (SOLO LECTURA GLOBAL) ---
+    const admin2Permissions = {};
     
+    ALL_PERMISSION_KEYS.forEach(key => {
+        // Establecer en TRUE solo si es un permiso de solo lectura
+        if (key.endsWith('.view') || key === 'inventario.view' || key === 'inventario-envios.view') {
+            admin2Permissions[key] = true;
+        } 
+        // Excepción de visualización para roles
+        else if (key === 'config.roles.manage') {
+            admin2Permissions[key] = true; 
+        }
+        // Todas las demás claves (creación, edición, eliminación, etc.) se establecen en FALSE
+        else {
+            admin2Permissions[key] = false;
+        }
+    });
+
+    // Re-chequeo explícito de las claves de modificación/manejo para asegurar que sean false.
+    admin2Permissions['config.company.edit'] = false;
+    admin2Permissions['config.users.manage'] = false;
+    admin2Permissions['config.users.edit_protected'] = false;
+    admin2Permissions['config.users.manage_tech_users'] = false;
+    admin2Permissions['offices.create'] = false;
+    admin2Permissions['offices.edit'] = false;
+    admin2Permissions['offices.delete'] = false;
+    // ... y para el resto de módulos clave, forzando a false si no son view
+    ALL_PERMISSION_KEYS.filter(key => !key.endsWith('.view') && key !== 'inventario.view' && key !== 'inventario-envios.view' && key !== 'config.roles.manage').forEach(key => {
+         admin2Permissions[key] = false;
+    });
+
+
     // --- 1. Roles y Permisos ---
     console.log('Sembrando Roles y Permisos...');
     await Role.bulkCreate([
@@ -120,7 +161,7 @@ const seedDatabase = async () => {
         { id: 'role-cont', name: 'Contador', permissions: contadorPermissions }, 
         { id: 'role-tech', name: 'Soporte Técnico', permissions: techPermissions },
         { id: 'role-ass', name: 'Asistente', permissions: assistantPermissions },
-        { id: 'role-admin2', name: 'Admin2 (Solo Lectura Global)', permissions: admin2Permissions } // Nuevo rol Admin2
+        { id: 'role-admin2', name: 'Admin2 (Solo Lectura Global)', permissions: admin2Permissions } 
     ], { updateOnDuplicate: ['name', 'permissions'] });
     console.log('Roles y permisos actualizados.');
 
@@ -167,7 +208,7 @@ const seedDatabase = async () => {
     
     await User.bulkCreate([
         { id: 'user-dcruz', name: 'DARLIN CRUZ', username: 'dcruz', password: hashedPassword, roleId: 'role-op', officeId: 'office-caracas' },
-        { id: 'user-drojas', name: 'DORIAN ROJAS', username: 'drojas', password: hashedPassword, roleId: 'role-ass', officeId: 'office-caracas' },
+        { id: 'user-drojas', name: 'DORIAN ROJAS', username: 'drojas', password: hashedPassword, roleId: 'role-ass', officeId: 'office-caracas' }, // Asistente
         { id: 'user-agarcia', name: 'ALEXANDER GARCIA', username: 'agarcia', password: hashedPassword, roleId: 'role-admin', officeId: 'office-caracas' },
         { id: 'user-nsotillo', name: 'NANCY SOTILLO', username: 'nsotillo', password: hashedPassword, roleId: 'role-op', officeId: 'office-caracas' },
         { id: 'user-mdaboin', name: 'MARLENE DABOIN', username: 'mdaboin', password: hashedPassword, roleId: 'role-op', officeId: 'office-barquisimeto-deposito' },
@@ -178,7 +219,7 @@ const seedDatabase = async () => {
         { id: 'user-rramirez', name: 'RICHARD RAMIREZ', username: 'rramirez', password: hashedPassword, roleId: 'role-op', officeId: 'office-terminal-merida' },
         { id: 'user-crodriguez', name: 'CARLOS RODRIGUEZ', username: 'crodriguez', password: hashedPassword, roleId: 'role-op', officeId: 'office-sancristobal-deposito' },
         { id: 'user-nquintero', name: 'NORA QUINTERO', username: 'nquintero', password: hashedPassword, roleId: 'role-op', officeId: 'office-terminal-valera' },
-        // Asignación del nuevo rol 'role-admin2' a JOSTON HERNANDEZ y JOSE RODRIGUEZ
+        // Usuarios Admin2 (Solo Lectura Global)
         { id: 'user-jhernandez', name: 'JOSTON HERNANDEZ', username: 'jhernandez', password: hashedPassword, roleId: 'role-admin2', officeId: 'office-caracas' }, 
         { id: 'user-jrodriguez', name: 'JOSE RODRIGUEZ', username: 'jrodriguez', password: hashedPassword, roleId: 'role-admin2', officeId: 'office-caracas' },
         

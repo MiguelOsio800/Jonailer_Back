@@ -15,6 +15,10 @@ let cachedToken = {
     expires: 0,
 };
 
+// --- CONSTANTES ---
+const FALLBACK_EMAIL = 'sincorreo@cooperativa.com'; 
+const EXENTO_CODE = 'E'; // Código para indicar que es una operación Exenta (IVA 0)
+
 // --- HELPER 1: HORA SEGURA (hh:mm:ss tt) ---
 const getHkaTime = () => {
     const options = {
@@ -22,7 +26,6 @@ const getHkaTime = () => {
         hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true
     };
     
-    // Usamos Intl para formatear partes específicas y asegurar el "0" inicial
     const formatter = new Intl.DateTimeFormat('en-US', options);
     const parts = formatter.formatToParts(new Date());
     
@@ -92,13 +95,11 @@ const getAuthToken = async () => {
 };
 
 // --- HELPER: FORMATEAR ITEMS Y MONTOS ---
-const formatDetails = (invoice, IVA_RATE = 0.16) => {
+const formatDetails = (invoice, IVA_RATE = 0.00) => {
     let subTotalGeneral = 0;
-    let ivaGeneral = 0;
-
+    
     if (invoice.totalAmount && invoice.totalAmount > 0) {
-        subTotalGeneral = invoice.totalAmount / (1 + IVA_RATE);
-        ivaGeneral = invoice.totalAmount - subTotalGeneral;
+        subTotalGeneral = invoice.totalAmount;
     }
 
     const items = invoice.guide?.merchandise || [];
@@ -107,45 +108,58 @@ const formatDetails = (invoice, IVA_RATE = 0.16) => {
     const detalles = items.map((item, index) => {
         const cantidad = item.quantity || 0;
         let itemSubtotal = 0;
-        let itemIva = 0;
 
         if (totalQuantity > 0) {
             const proportion = cantidad / totalQuantity;
             itemSubtotal = subTotalGeneral * proportion;
-            itemIva = ivaGeneral * proportion;
         }
 
         const precioItemRedondeado = parseFloat(itemSubtotal.toFixed(2));
-        const valorIvaRedondeado = parseFloat(itemIva.toFixed(2));
-        const valorTotalItem = precioItemRedondeado + valorIvaRedondeado;
+        const valorTotalItem = precioItemRedondeado;
 
         return {
             "NumeroLinea": (index + 1).toString(),
+            "CodigoCIIU": "01", 
             "CodigoPLU": item.sku || `GEN-${index + 1}`,
+            "IndicadorBienoServicio": "2", 
             "Descripcion": item.description,
             "Cantidad": cantidad.toString(),
+            "UnidadMedida": item.unit || "KG", 
             "PrecioUnitario": (cantidad > 0 ? itemSubtotal / cantidad : 0).toFixed(2).toString(),
+            "PrecioUnitarioDescuento": null, 
+            "MontoBonificacion": null, 
+            "DescripcionBonificacion": null, 
+            "DescuentoMonto": null, 
+            "RecargoMonto": null, 
             "PrecioItem": precioItemRedondeado.toFixed(2).toString(),
-            "CodigoImpuesto": "G",
-            "TasaIVA": (IVA_RATE * 100).toFixed(0),
-            "ValorIVA": valorIvaRedondeado.toFixed(2).toString(),
-            "ValorTotalItem": valorTotalItem.toFixed(2).toString()
+            "PrecioAntesDescuento": null, 
+            "CodigoImpuesto": EXENTO_CODE, 
+            "TasaIVA": "0", 
+            "ValorIVA": "0.00", 
+            "ValorTotalItem": valorTotalItem.toFixed(2).toString() 
         };
     });
 
-    return { detalles, subTotalGeneral, ivaGeneral, totalGeneral: subTotalGeneral + ivaGeneral };
+    return { 
+        detalles, 
+        subTotalGeneral, 
+        ivaGeneral: 0.00, 
+        totalGeneral: subTotalGeneral 
+    };
 };
 
-// --- HELPER: FORMATEAR FECHAS BD ---
-const formatDate = (dateInput) => {
-    const d = new Date(dateInput);
-    const day = String(d.getUTCDate()).padStart(2, '0');
-    const month = String(d.getUTCMonth() + 1).padStart(2, '0');
-    const year = d.getUTCFullYear();
-    return `${day}/${month}/${year}`;
+// --- FUNCIÓN PARA ENVIAR A HKA ---
+const sendToHka = async (token, serie, payload) => {
+    console.log(`📤 Enviando Factura a HKA (Serie: ${serie})...`);
+    const response = await axios.post(API_URL_EMISION, payload, {
+        headers: {'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json'}
+    });
+
+    console.log('✅ ¡Factura enviada a HKA con éxito!:', response.data);
+    return response.data;
 };
 
-// --- FUNCIÓN PRINCIPAL: ENVIAR FACTURA ---
+// --- FUNCIÓN PRINCIPAL: ENVIAR FACTURA (CORREGIDA) ---
 export const sendInvoiceToHKA = async (invoice) => {
     try {
         const companyInfo = await CompanyInfo.findByPk(1);
@@ -162,13 +176,70 @@ export const sendInvoiceToHKA = async (invoice) => {
         const serie = office.code;
 
         const numero = invoice.invoiceNumber.split('-')[1] || invoice.invoiceNumber;
+        
+        // Se hace el import dinámico aquí.
         const { NumerosALetras } = await import('numero-a-letras');
-        const { detalles, subTotalGeneral, ivaGeneral, totalGeneral } = formatDetails(invoice);
-        const IVA_RATE = 0.16;
+        
+        const IVA_RATE = 0.00; 
+        const { detalles, subTotalGeneral, totalGeneral } = formatDetails(invoice, IVA_RATE);
         
         const idType = (invoice.clientIdNumber.charAt(0) || 'V').toUpperCase();
         const horaEmision = getHkaTime();
 
+        // 1. Lógica para el Correo 
+        const clientEmailToSend = (invoice.clientEmail && invoice.clientEmail.trim() !== '') 
+            ? invoice.clientEmail 
+            : FALLBACK_EMAIL;
+
+        // 2. OBTENER VALORES DE COSTOS ADICIONALES (Utiliza los campos del modelo Invoice.js)
+        const manejoValue = (invoice.handlingFee || 0.00).toFixed(2).toString();
+        const seguroValue = (invoice.insuranceAmount || 0.00).toFixed(2).toString(); 
+        const ipostelValue = (invoice.ipostelFee || 0.00).toFixed(2).toString();
+        
+        // DEBUG: Muestra los valores antes de enviar
+        console.log(`[HKA] Valores InfoAdicional: Manejo=${manejoValue}, Seguro=${seguroValue}, Ipostel=${ipostelValue}`);
+
+
+        // 3. CÁLCULO DE VALORES EN USD (TotalesOtraMoneda)
+        // Ahora se lee el campo exchangeRate de la BD
+        const exchangeRate = parseFloat(invoice.exchangeRate || 1.00); 
+        const exchangeRateFixed = exchangeRate.toFixed(4).toString();
+
+        let totalesOtraMoneda = null;
+
+        if (exchangeRate > 0) {
+            const subTotalUSD = (totalGeneral / exchangeRate).toFixed(2);
+            const totalUSD = subTotalUSD; 
+            const usdTerms = { plural: "dólares", singular: "dólar", centPlural: "centavos", centSingular: "centavo" };
+            const totalUSDLatin = NumerosALetras(parseFloat(totalUSD), usdTerms);
+            
+            // Construcción del bloque de USD
+            totalesOtraMoneda = { 
+                "Moneda": "USD",
+                "TipoCambio": exchangeRateFixed,
+                "MontoGravadoTotal": "0.00",
+                "MontoPercibidoTotal": null,
+                "MontoExentoTotal": subTotalUSD,
+                "Subtotal": subTotalUSD,
+                "TotalAPagar": totalUSD,
+                "TotalIVA": "0.00",
+                "MontoTotalConIVA": totalUSD,
+                "MontoEnLetras": totalUSDLatin,
+                "ImpuestosSubtotal": [
+                    {
+                        "CodigoTotalImp": EXENTO_CODE, 
+                        "AlicuotaImp": "0.00",
+                        "BaseImponibleImp": subTotalUSD,
+                        "ValorTotalImp": "0.00"
+                    }
+                ]
+            };
+        } else {
+            console.warn("[HKA] Tasa de cambio no válida o cero. No se enviará el bloque TotalesOtraMoneda.");
+        }
+
+
+        // 4. CONSTRUCCIÓN DEL PAYLOAD FINAL
         const hkaInvoicePayload = {
             "DocumentoElectronico": {
                 "Encabezado": {
@@ -190,38 +261,53 @@ export const sendInvoiceToHKA = async (invoice) => {
                     },
                     "Comprador": {
                         "TipoIdentificacion": idType,
-                        "NumeroIdentificacion": invoice.clientIdNumber,
-                        "RazonSocial": invoice.clientName,
-                        "Direccion": invoice.guide?.receiver?.address || 'N/A',
+                        "NumeroIdentificacion": invoice.clientIdNumber, 
+                        "RazonSocial": invoice.clientName, 
+                        "Direccion": invoice.guide?.receiver?.address || 'N/A', 
                         "Pais": "VE",
-                        "Telefono": [invoice.guide?.receiver?.phone || '0000-0000000']
+                        "Telefono": [invoice.guide?.receiver?.phone || '0000-0000000'], 
+                        "Correo": [clientEmailToSend] 
                     },
                     "Totales": {
                         "NroItems": detalles.length.toString(),
-                        "MontoGravadoTotal": subTotalGeneral.toFixed(2).toString(),
-                        "MontoExentoTotal": "0.00",
+                        "MontoGravadoTotal": "0.00", 
+                        "MontoExentoTotal": subTotalGeneral.toFixed(2).toString(), 
                         "Subtotal": subTotalGeneral.toFixed(2).toString(),
-                        "TotalIVA": ivaGeneral.toFixed(2).toString(),
+                        "TotalIVA": "0.00", 
                         "MontoTotalConIVA": totalGeneral.toFixed(2).toString(),
                         "TotalAPagar": totalGeneral.toFixed(2).toString(),
                         "MontoEnLetras": NumerosALetras(totalGeneral, { 
                             plural: "bolívares", singular: "bolívar", centPlural: "céntimos", centSingular: "céntimo"
                         }),
                         "FormasPago": [{ "Forma": "01", "Monto": totalGeneral.toFixed(2).toString(), "Moneda": "VES" }],
-                        "ImpuestosSubtotal": [{ "CodigoTotalImp": "G", "AlicuotaImp": (IVA_RATE * 100).toFixed(2), "BaseImponibleImp": subTotalGeneral.toFixed(2).toString(), "ValorTotalImp": ivaGeneral.toFixed(2).toString() }]
-                    }
+                        "ImpuestosSubtotal": [{ 
+                            "CodigoTotalImp": EXENTO_CODE, 
+                            "AlicuotaImp": "0.00", 
+                            "BaseImponibleImp": subTotalGeneral.toFixed(2).toString(), 
+                            "ValorTotalImp": "0.00" 
+                        }]
+                    },
+                    "TotalesOtraMoneda": totalesOtraMoneda // Bloque USD
                 },
-                "DetallesItems": detalles
+                "DetallesItems": detalles,
+                "InfoAdicional": [ // Bloque de costos adicionales
+                    {
+                        "Campo": "Manejo",
+                        "Valor": manejoValue 
+                    },
+                    {
+                        "Campo": "Seguro",
+                        "Valor": seguroValue 
+                    },
+                    {
+                        "Campo": "Ipostel",
+                        "Valor": ipostelValue 
+                    }
+                ]
             }
         };
 
-        console.log(`📤 Enviando Factura a HKA (Serie: ${serie})...`);
-        const response = await axios.post(API_URL_EMISION, hkaInvoicePayload, {
-            headers: {'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json'}
-        });
-
-        console.log('✅ ¡Factura enviada a HKA con éxito!:', response.data);
-        return response.data;
+        return sendToHka(token, serie, hkaInvoicePayload);
 
     } catch (error) {
         handleHkaError(error);
@@ -237,7 +323,7 @@ export const sendDebitNoteToHKA = async (invoice, noteDetails) => {
     return await sendNoteToHKA(invoice, noteDetails, "03");
 };
 
-// --- LÓGICA DE NOTAS (CORREGIDA: AGREGADA SERIE FACTURA AFECTADA) ---
+// --- LÓGICA DE NOTAS (CORREGIDA) ---
 const sendNoteToHKA = async (invoice, noteDetails, docType) => {
     try {
         const companyInfo = await CompanyInfo.findByPk(1);
@@ -254,37 +340,75 @@ const sendNoteToHKA = async (invoice, noteDetails, docType) => {
         const fechaEmision = getHkaDate();
         const horaEmision = getHkaTime();
         
-        // 2. CORRECCIÓN NÚMEROS Y SERIES (Vital para evitar error 203)
-        // Nota: Limpiamos prefijos como "ND-"
+        // 2. CORRECCIÓN NÚMEROS Y SERIES
         const cleanNoteNumber = noteDetails.noteNumber.replace(/\D/g, ''); 
         
-        // Factura Afectada: Separamos Serie y Número (Ej: CCS-000001 -> Serie: CCS, Num: 000001)
         const invoiceParts = invoice.invoiceNumber.split('-');
         let affectedInvoiceSeries = "";
         let cleanAffectedInvoice = invoice.invoiceNumber;
 
         if (invoiceParts.length > 1) {
-            affectedInvoiceSeries = invoiceParts[0]; // "CCS"
-            cleanAffectedInvoice = invoiceParts[1];  // "000001"
+            affectedInvoiceSeries = invoiceParts[0]; 
+            cleanAffectedInvoice = invoiceParts[1];  
         } else {
-            // Si no tiene guión, asumimos que es el número y la serie es la misma de la oficina actual
             affectedInvoiceSeries = serie; 
         }
         
         const fechaFacturaAfectada = formatDateInput(invoice.date);
 
-        // 3. Montos
-        const IVA_RATE = 0.16;
-        let subTotalGeneral = 0;
-        let ivaGeneral = 0;
+        // 3. Montos - Se reutiliza formatDetails que fuerza IVA 0
+        const IVA_RATE = 0.00; 
+        const { NumerosALetras } = await import('numero-a-letras');
+        const { detalles, subTotalGeneral, totalGeneral } = formatDetails(invoice, IVA_RATE);
 
-        if (invoice.totalAmount && invoice.totalAmount > 0) {
-            subTotalGeneral = invoice.totalAmount / (1 + IVA_RATE);
-            ivaGeneral = invoice.totalAmount - subTotalGeneral;
+        // 4. Lógica para el Correo 
+        const clientEmailToSend = (invoice.clientEmail && invoice.clientEmail.trim() !== '') 
+            ? invoice.clientEmail 
+            : FALLBACK_EMAIL;
+
+        // 5. Costos adicionales
+        const manejoValue = (invoice.handlingFee || 0.00).toFixed(2).toString();
+        const seguroValue = (invoice.insuranceAmount || 0.00).toFixed(2).toString(); 
+        const ipostelValue = (invoice.ipostelFee || 0.00).toFixed(2).toString();
+        
+        // DEBUG: Muestra los valores antes de enviar
+        console.log(`[HKA Nota] Valores InfoAdicional: Manejo=${manejoValue}, Seguro=${seguroValue}, Ipostel=${ipostelValue}`);
+
+
+        // 6. CÁLCULO DE VALORES EN USD (SOLUCIÓN para Monto USD en notas)
+        const exchangeRate = parseFloat(invoice.exchangeRate || 1.00); 
+        const exchangeRateFixed = exchangeRate.toFixed(4).toString();
+
+        let totalesOtraMoneda = null;
+
+        if (exchangeRate > 0) {
+            const subTotalUSD = (totalGeneral / exchangeRate).toFixed(2);
+            const totalUSD = subTotalUSD; 
+            const usdTerms = { plural: "dólares", singular: "dólar", centPlural: "centavos", centSingular: "centavo" };
+            const totalUSDLatin = NumerosALetras(parseFloat(totalUSD), usdTerms);
+        
+            totalesOtraMoneda = { 
+                "Moneda": "USD",
+                "TipoCambio": exchangeRateFixed,
+                "MontoGravadoTotal": "0.00",
+                "MontoPercibidoTotal": null,
+                "MontoExentoTotal": subTotalUSD,
+                "Subtotal": subTotalUSD,
+                "TotalAPagar": totalUSD,
+                "TotalIVA": "0.00",
+                "MontoTotalConIVA": totalUSD,
+                "MontoEnLetras": totalUSDLatin,
+                "ImpuestosSubtotal": [
+                    {
+                        "CodigoTotalImp": EXENTO_CODE, 
+                        "AlicuotaImp": "0.00",
+                        "BaseImponibleImp": subTotalUSD,
+                        "ValorTotalImp": "0.00"
+                    }
+                ]
+            };
         }
 
-        const { NumerosALetras } = await import('numero-a-letras');
-        const { detalles, totalGeneral } = formatDetails(invoice);
 
         const hkaPayload = {
             "DocumentoElectronico": {
@@ -298,7 +422,7 @@ const sendNoteToHKA = async (invoice, noteDetails, docType) => {
                         "TipoDeVenta": "1",
                         "Moneda": "VES",
                         "NumeroFacturaAfectada": cleanAffectedInvoice,
-                        "SerieFacturaAfectada": affectedInvoiceSeries, // <--- CAMBIO: Agregado campo requerido
+                        "SerieFacturaAfectada": affectedInvoiceSeries, 
                         "FechaFacturaAfectada": fechaFacturaAfectada,
                         "MontoFacturaAfectada": invoice.totalAmount.toFixed(2).toString(),
                         "ComentarioFacturaAfectada": noteDetails.reason || "Ajuste administrativo"
@@ -316,14 +440,15 @@ const sendNoteToHKA = async (invoice, noteDetails, docType) => {
                         "RazonSocial": invoice.clientName,
                         "Direccion": invoice.guide?.receiver?.address || 'N/A',
                         "Pais": "VE",
-                        "Telefono": [invoice.guide?.receiver?.phone || '0000-0000000']
+                        "Telefono": [invoice.guide?.receiver?.phone || '0000-0000000'],
+                        "Correo": [clientEmailToSend] 
                     },
                     "Totales": {
                         "NroItems": detalles.length.toString(),
-                        "MontoGravadoTotal": subTotalGeneral.toFixed(2).toString(),
-                        "MontoExentoTotal": "0.00",
+                        "MontoGravadoTotal": "0.00", 
+                        "MontoExentoTotal": subTotalGeneral.toFixed(2).toString(),
                         "Subtotal": subTotalGeneral.toFixed(2).toString(),
-                        "TotalIVA": ivaGeneral.toFixed(2).toString(),
+                        "TotalIVA": "0.00", 
                         "MontoTotalConIVA": totalGeneral.toFixed(2).toString(),
                         "TotalAPagar": totalGeneral.toFixed(2).toString(),
                         "MontoEnLetras": NumerosALetras(totalGeneral, { 
@@ -335,24 +460,33 @@ const sendNoteToHKA = async (invoice, noteDetails, docType) => {
                             "Moneda": "VES"
                         }],
                         "ImpuestosSubtotal": [{
-                            "CodigoTotalImp": "G",
-                            "AlicuotaImp": (IVA_RATE * 100).toFixed(2),
+                            "CodigoTotalImp": EXENTO_CODE, 
+                            "AlicuotaImp": "0.00",
                             "BaseImponibleImp": subTotalGeneral.toFixed(2).toString(),
-                            "ValorTotalImp": ivaGeneral.toFixed(2).toString()
+                            "ValorTotalImp": "0.00" 
                         }]
-                    }
+                    },
+                    "TotalesOtraMoneda": totalesOtraMoneda
                 },
-                "DetallesItems": detalles
+                "DetallesItems": detalles,
+                "InfoAdicional": [
+                    {
+                        "Campo": "Manejo",
+                        "Valor": manejoValue
+                    },
+                    {
+                        "Campo": "Seguro",
+                        "Valor": seguroValue
+                    },
+                    {
+                        "Campo": "Ipostel",
+                        "Valor": ipostelValue
+                    }
+                ]
             }
         };
 
-        console.log(`=== ENVIANDO NOTA TIPO ${docType} A HKA (Serie: ${serie}) ===`);
-        const response = await axios.post(API_URL_EMISION, hkaPayload, {
-            headers: {'Authorization': `Bearer ${token}`, 'Content-Type': 'application/json'}
-        });
-
-        console.log('✅ Nota enviada con éxito:', response.data);
-        return response.data;
+        return sendToHka(token, serie, hkaPayload);
 
     } catch (error) {
         handleHkaError(error);

@@ -65,6 +65,30 @@ const Invoice = sequelize.define('Invoice', {
     allowNull: true,
   },
   
+  // =======================================================
+  // CAMPOS ADICIONALES REQUERIDOS PARA HKA / INFORMES
+  // =======================================================
+  handlingFee: { // Monto por manejo (solicitado)
+    type: DataTypes.FLOAT,
+    defaultValue: 0.00,
+    allowNull: false,
+  },
+  ipostelFee: { // Monto Ipostel (solicitado implícitamente)
+    type: DataTypes.FLOAT,
+    defaultValue: 0.00,
+    allowNull: false,
+  },
+  insuranceAmount: { // Monto Seguro (solicitado en InfoAdicional)
+    type: DataTypes.FLOAT,
+    defaultValue: 0.00,
+    allowNull: false,
+  },
+  exchangeRate: { // Tipo de cambio para el equivalente USD/USDT
+    type: DataTypes.FLOAT,
+    defaultValue: 1.00,
+    allowNull: false,
+  }
+  
 }, {
   timestamps: true,
 });
