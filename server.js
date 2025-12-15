@@ -50,11 +50,15 @@ app.use(morgan('combined'));
 // Lista de orígenes permitidos.
 const allowedOrigins = [
   'http://api.fraternidad.local',
+  'http://fraternidad.local',
+  'http://localhost:81',
   'http://localhost:3000',
   'http://localhost:5173',
   'https://4wt9b8zl-5000.use2.devtunnels.ms', // Tu backend
-  'https://4wt9b8zl-5173.use2.devtunnels.ms'  // Tu frontend (si reenviaras el puerto 5173)
+  'https://4wt9b8zl-5173.use2.devtunnels.ms'  // Tu frontend (si reenviaras el puerto 5173),
 ];
+
+
 
 const corsOptions = {
   origin: function (origin, callback) {
@@ -77,6 +81,8 @@ const corsOptions = {
 app.use(cors({ origin: '*' }));
 app.use(express.json({ limit: '30mb' }));
 app.use(express.urlencoded({ limit: '30mb', extended: true }));
+
+app.set('trust proxy', 1); // Confía en el primer proxy
 
 // --- Rutas de la API ---
 app.use('/api/auth', authRoutes);
