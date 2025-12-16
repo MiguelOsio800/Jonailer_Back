@@ -63,3 +63,31 @@ export const authorize = (...requiredPermissions) => {
         next();
     };
 };
+
+export const checkPermission = (permission) => {
+  return async (req, res, next) => {
+    const { user } = req;
+    
+    // 1. Si es admin total, pasa siempre
+    if (user.Role.id === 'role-admin' || user.Role.id === 'role-tech') {
+      return next();
+    }
+
+    // 2. Verificar si el usuario tiene el permiso en su rol
+    const hasPermission = user.Role.permissions[permission];
+
+    if (!hasPermission) {
+      return res.status(403).json({ message: 'No tienes permiso para acceder a este módulo' });
+    }
+
+    // --- LÓGICA ESPECIAL PARA ADMIN2 (SOLO LECTURA) ---
+    // Si el usuario es admin2 y el método NO es GET, bloqueamos la acción
+    if (user.Role.id === 'role-admin2' && req.method !== 'GET') {
+      return res.status(403).json({ 
+        message: 'Acceso denegado: El rol Admin2 solo tiene permisos de lectura.' 
+      });
+    }
+
+    next();
+  };
+};

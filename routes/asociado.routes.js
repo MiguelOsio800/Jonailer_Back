@@ -4,15 +4,16 @@ import {
     getAsociados, createAsociado, updateAsociado, deleteAsociado,
     getCertificados, createCertificado, updateCertificado, deleteCertificado,
     getPagos, createPago, deletePago,
-    getRecibos, createRecibo
+    getRecibos, createRecibo,
+    // Importamos las nuevas funciones necesarias para resolver el 404
+    getDeudasByAsociado, getCertificadosByAsociado 
 } from '../controllers/asociado.controller.js';
 
 const router = express.Router();
 
-// Todas las rutas de este archivo requerirán que el usuario esté autenticado.
 router.use(protect);
 
-// Rutas para Asociados
+// --- Rutas de Asociados ---
 router.route('/')
     .get(authorize('asociados.view'), getAsociados)
     .post(authorize('asociados.create'), createAsociado);
@@ -21,25 +22,28 @@ router.route('/:id')
     .put(authorize('asociados.edit'), updateAsociado)
     .delete(authorize('asociados.delete'), deleteAsociado);
 
-// Rutas para Certificados
+// 👇 ESTAS SON LAS RUTAS QUE FALTAN Y DAN ERROR 404
+router.get('/:id/deudas', authorize('asociados.view'), getDeudasByAsociado);
+router.get('/:id/certificados', authorize('asociados.view'), getCertificadosByAsociado);
+
+// --- Rutas Generales de Certificados, Pagos y Recibos ---
 router.route('/certificados')
     .get(authorize('asociados.view'), getCertificados)
-    .post(authorize('asociados.edit'), createCertificado); // Se necesita permiso de edición de asociado para manejar certificados
+    .post(authorize('asociados.edit'), createCertificado);
 
 router.route('/certificados/:id')
     .put(authorize('asociados.edit'), updateCertificado)
     .delete(authorize('asociados.edit'), deleteCertificado);
 
-// Rutas para Pagos y Recibos
 router.route('/pagos')
     .get(authorize('asociados.view'), getPagos)
-    .post(authorize('asociados.edit'), createPago); // Permiso de edición para añadir deudas
+    .post(authorize('asociados.edit'), createPago);
 
 router.route('/pagos/:id')
-    .delete(authorize('asociados.pagos.delete'), deletePago); // Permiso específico para borrar deudas
+    .delete(authorize('asociados.pagos.delete'), deletePago);
 
 router.route('/recibos')
     .get(authorize('asociados.view'), getRecibos)
-    .post(authorize('asociados.edit'), createRecibo); // Permiso de edición para registrar pagos
+    .post(authorize('asociados.edit'), createRecibo);
 
 export default router;

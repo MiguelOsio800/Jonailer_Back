@@ -149,6 +149,22 @@ export const createRecibo = async (req, res) => {
     try {
         const { pagosIds, ...reciboData } = req.body;
         
+        // Verificación de seguridad: Validar que los pagos existan y no estén ya pagados
+        const pagosPendientes = await PagoAsociado.findAll({
+            where: {
+                id: { [Op.in]: pagosIds },
+                status: 'Pendiente'
+            },
+            transaction: t
+        });
+
+        if (pagosPendientes.length !== pagosIds.length) {
+            await t.rollback();
+            return res.status(400).json({ 
+                message: 'Error: Uno o más pagos ya han sido procesados o no existen.' 
+            });
+        }
+
         // 1. Crear el recibo
         const newRecibo = await ReciboPagoAsociado.create({ 
             id: `recibo-${Date.now()}`, 
@@ -167,5 +183,32 @@ export const createRecibo = async (req, res) => {
     } catch (error) {
         await t.rollback();
         res.status(500).json({ message: 'Error al crear recibo', error: error.message });
+    }
+};
+
+export const getDeudasByAsociado = async (req, res) => {
+    try {
+        const deudas = await PagoAsociado.findAll({
+            where: { 
+                asociadoId: req.params.id,
+                status: 'Pendiente' 
+            },
+            order: [['fechaVencimiento', 'ASC']]
+        });
+        res.json(deudas);
+    } catch (error) {
+        res.status(500).json({ message: 'Error al obtener deudas del asociado', error: error.message });
+    }
+};
+
+// @desc    Obtener certificados de un asociado específico
+export const getCertificadosByAsociado = async (req, res) => {
+    try {
+        const certificados = await Certificado.findAll({
+            where: { asociadoId: req.params.id }
+        });
+        res.json(certificados);
+    } catch (error) {
+        res.status(500).json({ message: 'Error al obtener certificados del asociado', error: error.message });
     }
 };
