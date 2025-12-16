@@ -27,6 +27,14 @@ const Invoice = sequelize.define('Invoice', {
     type: DataTypes.STRING,
     allowNull: false,
   },
+  // --- NUEVO: Campo para el email del cliente ---
+  clientEmail: { 
+    type: DataTypes.STRING,
+    allowNull: true,
+    validate: {
+      isEmail: true,
+    },
+  },
   totalAmount: {
     type: DataTypes.FLOAT,
     allowNull: false,
@@ -66,19 +74,19 @@ const Invoice = sequelize.define('Invoice', {
   },
   
   // =======================================================
-  // CAMPOS ADICIONALES REQUERIDOS PARA HKA / INFORMES
+  // CAMPOS DE COSTOS Y MONEDA ADICIONALES (AJUSTADOS)
   // =======================================================
-  handlingFee: { // Monto por manejo (solicitado)
+  Montomanejo: { // Monto por manejo (Anteriormente handlingFee)
     type: DataTypes.FLOAT,
     defaultValue: 0.00,
     allowNull: false,
   },
-  ipostelFee: { // Monto Ipostel (solicitado implícitamente)
+  ipostelFee: { // Monto Ipostel
     type: DataTypes.FLOAT,
     defaultValue: 0.00,
     allowNull: false,
   },
-  insuranceAmount: { // Monto Seguro (solicitado en InfoAdicional)
+  insuranceAmount: { // Monto Seguro
     type: DataTypes.FLOAT,
     defaultValue: 0.00,
     allowNull: false,
@@ -87,8 +95,22 @@ const Invoice = sequelize.define('Invoice', {
     type: DataTypes.FLOAT,
     defaultValue: 1.00,
     allowNull: false,
-  }
+  },
   
+  // =======================================================
+  // CAMPOS DE DESCUENTO (NUEVOS)
+  // =======================================================
+  discountAmount: { // Monto total del descuento aplicado
+    type: DataTypes.FLOAT,
+    defaultValue: 0.00,
+    allowNull: false,
+  },
+  discountPercentage: { // Porcentaje aplicado (para referencia)
+    type: DataTypes.FLOAT,
+    defaultValue: 0.00,
+    allowNull: false,
+  }
+
 }, {
   timestamps: true,
 });

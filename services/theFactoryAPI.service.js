@@ -17,10 +17,15 @@ let cachedToken = {
 
 // --- CONSTANTES ---
 const FALLBACK_EMAIL = 'sincorreo@cooperativa.com'; 
-const EXENTO_CODE = 'E'; // Código para indicar que es una operación Exenta (IVA 0)
+const EXENTO_CODE = 'E';
+
+// ==========================================================
+// CORRECCIÓN DE ERROR "is not defined": Se usa la declaración
+// 'function' en lugar de 'const = () =>' para asegurar el alcance global.
+// ==========================================================
 
 // --- HELPER 1: HORA SEGURA (hh:mm:ss tt) ---
-const getHkaTime = () => {
+function getHkaTime() {
     const options = {
         timeZone: 'America/Caracas',
         hour: '2-digit', minute: '2-digit', second: '2-digit', hour12: true
@@ -35,25 +40,36 @@ const getHkaTime = () => {
     const dayPeriod = parts.find(p => p.type === 'dayPeriod').value.toLowerCase();
 
     return `${hour}:${minute}:${second} ${dayPeriod}`;
-};
+}
 
 // --- HELPER 2: FECHA SEGURA (dd/MM/yyyy) ---
-const getHkaDate = () => {
+function getHkaDate() {
     const d = new Date();
     const day = String(d.getDate()).padStart(2, '0');
     const month = String(d.getMonth() + 1).padStart(2, '0');
     const year = d.getFullYear();
     return `${day}/${month}/${year}`;
-};
+}
 
 // --- HELPER 3: FORMATO FECHA INPUT ---
-const formatDateInput = (dateInput) => {
+function formatDateInput(dateInput) {
     const d = new Date(dateInput);
     const day = String(d.getUTCDate()).padStart(2, '0');
     const month = String(d.getUTCMonth() + 1).padStart(2, '0');
     const year = d.getUTCFullYear();
     return `${day}/${month}/${year}`;
-};
+}
+
+// --- HELPER 4: FORMATO FECHAS BD (dd/MM/yyyy) ---
+function formatDate(dateInput) {
+    const d = new Date(dateInput);
+    const day = String(d.getUTCDate()).padStart(2, '0');
+    const month = String(d.getUTCMonth() + 1).padStart(2, '0');
+    const year = d.getUTCFullYear();
+    return `${day}/${month}/${year}`;
+}
+// ==========================================================
+
 
 // --- OBTENER TOKEN ---
 const getAuthToken = async () => {
@@ -192,6 +208,7 @@ export const sendInvoiceToHKA = async (invoice) => {
             : FALLBACK_EMAIL;
 
         // 2. OBTENER VALORES DE COSTOS ADICIONALES (Utiliza los campos del modelo Invoice.js)
+        // ESTOS VALORES SE LEEN DE LA BASE DE DATOS. SI SON 0.00, LA BD LOS TIENE EN 0.
         const manejoValue = (invoice.handlingFee || 0.00).toFixed(2).toString();
         const seguroValue = (invoice.insuranceAmount || 0.00).toFixed(2).toString(); 
         const ipostelValue = (invoice.ipostelFee || 0.00).toFixed(2).toString();
@@ -200,8 +217,7 @@ export const sendInvoiceToHKA = async (invoice) => {
         console.log(`[HKA] Valores InfoAdicional: Manejo=${manejoValue}, Seguro=${seguroValue}, Ipostel=${ipostelValue}`);
 
 
-        // 3. CÁLCULO DE VALORES EN USD (TotalesOtraMoneda)
-        // Ahora se lee el campo exchangeRate de la BD
+        // 3. CÁLCULO DE VALORES EN USD
         const exchangeRate = parseFloat(invoice.exchangeRate || 1.00); 
         const exchangeRateFixed = exchangeRate.toFixed(4).toString();
 
@@ -247,7 +263,7 @@ export const sendInvoiceToHKA = async (invoice) => {
                         "TipoDocumento": "01",
                         "Serie": serie,
                         "NumeroDocumento": numero,
-                        "FechaEmision": formatDate(invoice.date),
+                        "FechaEmision": formatDate(invoice.date), 
                         "HoraEmision": horaEmision,
                         "TipoDeVenta": "1",
                         "Moneda": "VES",
@@ -287,10 +303,10 @@ export const sendInvoiceToHKA = async (invoice) => {
                             "ValorTotalImp": "0.00" 
                         }]
                     },
-                    "TotalesOtraMoneda": totalesOtraMoneda // Bloque USD
+                    "TotalesOtraMoneda": totalesOtraMoneda
                 },
                 "DetallesItems": detalles,
-                "InfoAdicional": [ // Bloque de costos adicionales
+                "InfoAdicional": [ 
                     {
                         "Campo": "Manejo",
                         "Valor": manejoValue 
@@ -307,6 +323,7 @@ export const sendInvoiceToHKA = async (invoice) => {
             }
         };
 
+        // 5. Envío de la factura
         return sendToHka(token, serie, hkaInvoicePayload);
 
     } catch (error) {
