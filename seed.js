@@ -23,7 +23,8 @@ const ALL_PERMISSION_KEYS = [
     'categories.view', 'categories.create', 'categories.edit', 'categories.delete', 'offices.view',
     'offices.create', 'offices.edit', 'offices.delete', 'shipping-types.view', 'shipping-types.create',
     'shipping-types.edit', 'shipping-types.delete', 'payment-methods.view', 'payment-methods.create',
-    'payment-methods.edit', 'payment-methods.delete'
+    'payment-methods.edit', 'payment-methods.delete',
+    'config.profile.edit' // <--- Permiso Agregado
 ];
 
 const seedDatabase = async () => {
@@ -44,6 +45,7 @@ const seedDatabase = async () => {
     // Definición del Rol Contador
     const contadorPermissions = {
         'dashboard.view': true,
+        'config.profile.edit': true, // <--- Agregado
         // INCLUSIÓN COMPLETA DEL MÓDULO CONTABLE 
         ...contablePermissionsRaw.reduce((acc, key) => ({ ...acc, [key]: true }), {}),
         
@@ -66,6 +68,7 @@ const seedDatabase = async () => {
     const operatorPermissions = {
         // --- Vistas Operativas ---
         'dashboard.view': true,
+        'config.profile.edit': true, // <--- Agregado
         'shipping-guide.view': true,
         'invoices.view': true,
         'flota.view': true,
@@ -98,24 +101,24 @@ const seedDatabase = async () => {
         'reports.view': true,
     };
     
-    // --- ROL ASISTENTE (ACTUALIZADO para permitir VIEW en Config/Audit y Asociados) ---
+    // --- ROL ASISTENTE ---
     const assistantPermissions = {};
     
-    // 1. Dar acceso completo al Módulo de Asociados (como Operador + Acceso Completo a Asociados)
+    // 1. Dar acceso completo al Módulo de Asociados
     Object.assign(assistantPermissions, operatorPermissions);
     assistantPermissions['asociados.create'] = true;
     assistantPermissions['asociados.edit'] = true;
     assistantPermissions['asociados.delete'] = true;
     assistantPermissions['asociados.pagos.create'] = true;
     assistantPermissions['asociados.pagos.delete'] = true;
+    assistantPermissions['config.profile.edit'] = true; // <--- Agregado
 
-    // 2. Asegurar vista de Configuración, Auditoría y Roles para la navegación (sin permisos de modificación)
+    // 2. Navegación
     assistantPermissions['configuracion.view'] = true; 
     assistantPermissions['auditoria.view'] = true;
-    // Esto es necesario para que la interfaz cargue la lista de roles (resuelve 403 en /api/roles)
     assistantPermissions['config.roles.manage'] = true; 
     
-    // 3. Denegar explícitamente cualquier otra capacidad de modificación en Configuración
+    // 3. Denegar modificaciones
     assistantPermissions['config.company.edit'] = false;
     assistantPermissions['config.users.manage'] = false;
     assistantPermissions['config.users.edit_protected'] = false;
@@ -125,33 +128,21 @@ const seedDatabase = async () => {
     const admin2Permissions = {};
     
     ALL_PERMISSION_KEYS.forEach(key => {
-        // Establecer en TRUE solo si es un permiso de solo lectura
-        if (key.endsWith('.view') || key === 'inventario.view' || key === 'inventario-envios.view') {
+        // Habilitamos todos los que sean .view o relacionados a navegación de inventario/configuración
+        if (key.endsWith('.view') || key.includes('inventario') || key === 'configuracion.view') {
             admin2Permissions[key] = true;
         } 
-        // Excepción de visualización para roles
-        else if (key === 'config.roles.manage') {
+        // Permitimos entrar a Roles y Usuarios para VER (el backend debe restringir el método POST/PUT/DELETE)
+        else if (key === 'config.roles.manage' || key === 'config.users.manage') { 
             admin2Permissions[key] = true; 
         }
-        // Todas las demás claves (creación, edición, eliminación, etc.) se establecen en FALSE
+        else if (key === 'config.profile.edit') { 
+            admin2Permissions[key] = true;
+        }
         else {
             admin2Permissions[key] = false;
         }
     });
-
-    // Re-chequeo explícito de las claves de modificación/manejo para asegurar que sean false.
-    admin2Permissions['config.company.edit'] = false;
-    admin2Permissions['config.users.manage'] = false;
-    admin2Permissions['config.users.edit_protected'] = false;
-    admin2Permissions['config.users.manage_tech_users'] = false;
-    admin2Permissions['offices.create'] = false;
-    admin2Permissions['offices.edit'] = false;
-    admin2Permissions['offices.delete'] = false;
-    // ... y para el resto de módulos clave, forzando a false si no son view
-    ALL_PERMISSION_KEYS.filter(key => !key.endsWith('.view') && key !== 'inventario.view' && key !== 'inventario-envios.view' && key !== 'config.roles.manage').forEach(key => {
-         admin2Permissions[key] = false;
-    });
-
 
     // --- 1. Roles y Permisos ---
     console.log('Sembrando Roles y Permisos...');
@@ -163,9 +154,8 @@ const seedDatabase = async () => {
         { id: 'role-ass', name: 'Asistente', permissions: assistantPermissions },
         { id: 'role-admin2', name: 'Admin2 (Solo Lectura Global)', permissions: admin2Permissions } 
     ], { updateOnDuplicate: ['name', 'permissions'] });
-    console.log('Roles y permisos actualizados.');
 
-    // --- 2. Información de la Empresa (Sin cambios) ---
+    // --- 2. Información de la Empresa ---
     console.log('Sembrando Información de la Empresa...');
     await CompanyInfo.findOrCreate({
         where: { id: 1 },
@@ -177,12 +167,11 @@ const seedDatabase = async () => {
             phone: '0212-555-1234',
             costPerKg: 10.5,
             bcvRate: 36.50,
-            lastInvoiceNumber: 1,
+            lastInvoiceNumber: 0,
         }
     });
-    console.log('Información de la empresa verificada o creada.');
 
-    // --- 3. Oficinas (Sin cambios) ---
+    // --- 3. Oficinas ---
     console.log('Sembrando Oficinas...');
     await Office.bulkCreate([
         { id: 'office-caracas', code: 'A', name: 'OFICINA SEDE CARACAS', address: 'OFICINA SEDE CARACAS', phone: '0212-111-2233' },
@@ -200,15 +189,14 @@ const seedDatabase = async () => {
         { id: 'office-terminal-sancristobal', code: 'M', name: 'OFICINA TERMINAL SAN CRISTOBAL', address: 'OFICINA TERMINAL SAN CRISTOBAL', phone: 'N/A' },
         { id: 'office-sancristobal-deposito', code: 'N', name: 'OFICINA SAN CRISTOBAL DEPOSITO', address: 'OFICINA SAN CRISTOBAL DEPOSITO', phone: 'N/A' }
     ], { updateOnDuplicate: ['name', 'address', 'phone', 'code'] });
-    console.log('Oficinas sembradas.');
 
-    // --- 4. Usuarios (Actualizado con el rol admin2) ---
+    // --- 4. Usuarios ---
     console.log('Sembrando Usuarios...');
     const hashedPassword = await bcrypt.hash('123', 10);
     
-    await User.bulkCreate([
+    const usersData = [
         { id: 'user-dcruz', name: 'DARLIN CRUZ', username: 'dcruz', password: hashedPassword, roleId: 'role-op', officeId: 'office-caracas' },
-        { id: 'user-drojas', name: 'DORIAN ROJAS', username: 'drojas', password: hashedPassword, roleId: 'role-ass', officeId: 'office-caracas' }, // Asistente
+        { id: 'user-drojas', name: 'DORIAN ROJAS', username: 'drojas', password: hashedPassword, roleId: 'role-ass', officeId: 'office-caracas' },
         { id: 'user-agarcia', name: 'ALEXANDER GARCIA', username: 'agarcia', password: hashedPassword, roleId: 'role-admin', officeId: 'office-caracas' },
         { id: 'user-nsotillo', name: 'NANCY SOTILLO', username: 'nsotillo', password: hashedPassword, roleId: 'role-op', officeId: 'office-caracas' },
         { id: 'user-mdaboin', name: 'MARLENE DABOIN', username: 'mdaboin', password: hashedPassword, roleId: 'role-op', officeId: 'office-barquisimeto-deposito' },
@@ -219,10 +207,8 @@ const seedDatabase = async () => {
         { id: 'user-rramirez', name: 'RICHARD RAMIREZ', username: 'rramirez', password: hashedPassword, roleId: 'role-op', officeId: 'office-terminal-merida' },
         { id: 'user-crodriguez', name: 'CARLOS RODRIGUEZ', username: 'crodriguez', password: hashedPassword, roleId: 'role-op', officeId: 'office-sancristobal-deposito' },
         { id: 'user-nquintero', name: 'NORA QUINTERO', username: 'nquintero', password: hashedPassword, roleId: 'role-op', officeId: 'office-terminal-valera' },
-        // Usuarios Admin2 (Solo Lectura Global)
         { id: 'user-jhernandez', name: 'JOSTON HERNANDEZ', username: 'jhernandez', password: hashedPassword, roleId: 'role-admin2', officeId: 'office-caracas' }, 
         { id: 'user-jrodriguez', name: 'JOSE RODRIGUEZ', username: 'jrodriguez', password: hashedPassword, roleId: 'role-admin2', officeId: 'office-caracas' },
-        
         { id: 'user-hlarez', name: 'HOWARD LAREZ', username: 'hlarez', password: hashedPassword, roleId: 'role-op', officeId: 'office-terminal-bandera' },
         { id: 'user-rpalencia', name: 'ROWGELIS PALENCIA', username: 'rpalencia', password: hashedPassword, roleId: 'role-op', officeId: 'office-valencia' },
         { id: 'user-hcastillo2', name: 'HIGINIA CASTILLO', username: 'hcastillo2', password: hashedPassword, roleId: 'role-op', officeId: 'office-terminal-barinas' }, 
@@ -231,40 +217,25 @@ const seedDatabase = async () => {
         { id: 'user-ccampos', name: 'CAROLINA CAMPOS', username: 'ccampos', password: hashedPassword, roleId: 'role-cont', officeId: 'office-caracas' },
         { id: 'user-soporte', name: 'SOPORTE', username: 'soporte', password: hashedPassword, roleId: 'role-tech', officeId: 'office-caracas' },
         { id: 'user-admin', name: 'ADMIN', username: 'admin', password: hashedPassword, roleId: 'role-admin', officeId: 'office-caracas' }
-    ], { updateOnDuplicate: ['name', 'password', 'roleId', 'officeId'] });
-    console.log('Usuarios sembrados.');
+    ];
 
-    // --- 5. Catálogos Varios (Sin cambios) ---
-    console.log('Sembrando Catálogos (Métodos de Pago, Tipos de Envío, etc.)...');
+    for (const u of usersData) {
+        await User.upsert(u);
+    }
+
+    // --- 5. Catálogos ---
     await PaymentMethod.bulkCreate([
         { id: 'pm-efectivo', name: 'Efectivo', type: 'Efectivo' },
         { id: 'pm-zelle', name: 'Zelle', type: 'Transferencia' },
         { id: 'pm-bs', name: 'Transferencia Bs.', type: 'Transferencia', bankName: 'Banesco', accountNumber: '0134-1234-56-7890123456' }
     ], { updateOnDuplicate: ['name', 'type', 'bankName', 'accountNumber'] });
 
-    await ShippingType.bulkCreate([
-        { id: 'st-estandar', name: 'Envío Estándar' },
-        { id: 'st-expreso', name: 'Envío Expreso' }
-    ], { updateOnDuplicate: ['name'] });
+    await ShippingType.bulkCreate([{ id: 'st-estandar', name: 'Envío Estándar' }, { id: 'st-expreso', name: 'Envío Expreso' }], { updateOnDuplicate: ['name'] });
+    await Category.bulkCreate([{ id: 'cat-electronica', name: 'Electrónica' }, { id: 'cat-ropa', name: 'Ropa y Calzado' }], { updateOnDuplicate: ['name'] });
+    await ExpenseCategory.bulkCreate([{ id: 'exp-cat-oficina', name: 'Suministros de Oficina' }, { id: 'exp-cat-combustible', name: 'Combustible y Lubricantes' }], { updateOnDuplicate: ['name'] });
+    await AssetCategory.bulkCreate([{ id: 'asset-cat-pc', name: 'Equipos de Computación' }, { id: 'asset-cat-muebles', name: 'Mobiliario y Equipo' }], { updateOnDuplicate: ['name'] });
 
-    await Category.bulkCreate([
-        { id: 'cat-electronica', name: 'Electrónica' },
-        { id: 'cat-ropa', name: 'Ropa y Calzado' }
-    ], { updateOnDuplicate: ['name'] });
-
-    await ExpenseCategory.bulkCreate([
-        { id: 'exp-cat-oficina', name: 'Suministros de Oficina' },
-        { id: 'exp-cat-combustible', name: 'Combustible y Lubricantes' }
-    ], { updateOnDuplicate: ['name'] });
-
-    await AssetCategory.bulkCreate([
-        { id: 'asset-cat-pc', name: 'Equipos de Computación' },
-        { id: 'asset-cat-muebles', name: 'Mobiliario y Equipo' }
-    ], { updateOnDuplicate: ['name'] });
-    console.log('Catálogos sembrados.');
-
-    // --- 6. Entidades Principales (Clientes, Proveedores, Asociados) (Sin cambios) ---
-    console.log('Sembrando Clientes, Proveedores y Asociados...');
+    // --- 6. Clientes, Proveedores y Asociados ---
     await Client.bulkCreate([
         { id: 'client-1', idNumber: 'V-12345678-9', clientType: 'persona', name: 'Maria Rodriguez', phone: '0414-1234567', address: 'La Candelaria, Caracas' },
         { id: 'client-2', idNumber: 'J-87654321-0', clientType: 'empresa', name: 'Comercial XYZ', phone: '0212-9876543', address: 'El Rosal, Caracas' }
@@ -279,10 +250,8 @@ const seedDatabase = async () => {
         { id: 'asoc-1', codigo: 'A001', nombre: 'Pedro Pérez', cedula: 'V-8765432-1', fechaIngreso: '2020-01-15' },
         { id: 'asoc-2', codigo: 'A002', nombre: 'Ana Gómez', cedula: 'V-9876543-2', fechaIngreso: '2021-05-20' }
     ], { updateOnDuplicate: ['nombre', 'cedula', 'fechaIngreso'] });
-    console.log('Entidades principales sembradas.');
 
-    // --- 7. Entidades Dependientes (Vehículos, Activos) (Sin cambios) ---
-    console.log('Sembrando Vehículos y Activos...');
+    // --- 7. Vehículos y Activos ---
     await Vehicle.bulkCreate([
         { id: 'vehicle-1', asociadoId: 'asoc-1', placa: 'AB123CD', modelo: 'Ford Cargo 815', capacidadCarga: 5000, status: 'Disponible' },
         { id: 'vehicle-2', asociadoId: 'asoc-2', placa: 'XY456Z', modelo: 'Chevrolet NPR', capacidadCarga: 4500, status: 'Disponible' }
@@ -292,22 +261,11 @@ const seedDatabase = async () => {
         { id: 'asset-1', code: 'PC-001', name: 'Laptop Gerencia', purchaseValue: 1200, officeId: 'office-caracas', categoryId: 'asset-cat-pc' },
         { id: 'asset-2', code: 'ES-005', name: 'Escritorio Operador', purchaseValue: 300, officeId: 'office-valencia', categoryId: 'asset-cat-muebles' }
     ], { updateOnDuplicate: ['name', 'purchaseValue', 'officeId', 'categoryId'] });
-    console.log('Entidades dependientes sembradas.');
-
-    // --- 8. Plan de Cuentas Contables (Omite la siembra) ---
-    console.log('Omite la siembra del Plan de Cuentas Contables.');
-
-    // --- 9. Asiento Manual de Ejemplo (Omite la siembra) ---
-    console.log('Omite la siembra del Asiento Manual de ejemplo por dependencia con Plan de Cuentas Contables.');
 
     console.log('Siembra de datos completada exitosamente.');
 
   } catch (error) {
     console.error('Error durante la siembra de datos:', error);
-  } finally {
-    // Es buena práctica cerrar la conexión de la base de datos después de la siembra
-    // await sequelize.close(); 
-    // console.log('Conexión con la base de datos cerrada.');
   }
 };
 

@@ -1,5 +1,5 @@
 import express from 'express';
-import { login, refreshToken, logout, getMe } from '../controllers/auth.controller.js';
+import { login, refreshToken, logout, getMe, validateToken } from '../controllers/auth.controller.js';
 import { protect } from '../middleware/auth.middleware.js';
 import rateLimit from 'express-rate-limit';
 
@@ -20,5 +20,6 @@ router.post('/refresh-token', refreshToken);
 router.post('/logout', logout); // <-- Esta es la ruta que faltaba
 
 router.get('/profile', protect, getMe);
+router.post('/validate-token', protect, validateToken);
 
 export default router;

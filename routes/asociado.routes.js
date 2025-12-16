@@ -5,28 +5,30 @@ import {
     getCertificados, createCertificado, updateCertificado, deleteCertificado,
     getPagos, createPago, deletePago,
     getRecibos, createRecibo,
-    // Importamos las nuevas funciones necesarias para resolver el 404
-    getDeudasByAsociado, getCertificadosByAsociado 
+    // Nuevas funciones que debemos añadir al controlador
+    getDeudasByAsociado,
+    getCertificadosByAsociado
 } from '../controllers/asociado.controller.js';
 
 const router = express.Router();
 
 router.use(protect);
 
-// --- Rutas de Asociados ---
+// --- Rutas de Asociados (Básicas) ---
 router.route('/')
     .get(authorize('asociados.view'), getAsociados)
     .post(authorize('asociados.create'), createAsociado);
+
+// --- NUEVAS RUTAS ESPECÍFICAS (Resuelve el 404 de dcruz) ---
+// Estas deben ir antes de /:id para que Express las reconozca correctamente
+router.get('/:id/deudas', authorize('asociados.view'), getDeudasByAsociado);
+router.get('/:id/certificados', authorize('asociados.view'), getCertificadosByAsociado);
 
 router.route('/:id')
     .put(authorize('asociados.edit'), updateAsociado)
     .delete(authorize('asociados.delete'), deleteAsociado);
 
-// 👇 ESTAS SON LAS RUTAS QUE FALTAN Y DAN ERROR 404
-router.get('/:id/deudas', authorize('asociados.view'), getDeudasByAsociado);
-router.get('/:id/certificados', authorize('asociados.view'), getCertificadosByAsociado);
-
-// --- Rutas Generales de Certificados, Pagos y Recibos ---
+// --- Rutas de Certificados Generales ---
 router.route('/certificados')
     .get(authorize('asociados.view'), getCertificados)
     .post(authorize('asociados.edit'), createCertificado);
@@ -35,6 +37,7 @@ router.route('/certificados/:id')
     .put(authorize('asociados.edit'), updateCertificado)
     .delete(authorize('asociados.edit'), deleteCertificado);
 
+// --- Rutas de Pagos y Recibos ---
 router.route('/pagos')
     .get(authorize('asociados.view'), getPagos)
     .post(authorize('asociados.edit'), createPago);

@@ -188,27 +188,36 @@ export const createRecibo = async (req, res) => {
 
 export const getDeudasByAsociado = async (req, res) => {
     try {
+        const { id } = req.params;
         const deudas = await PagoAsociado.findAll({
             where: { 
-                asociadoId: req.params.id,
+                asociadoId: id,
                 status: 'Pendiente' 
             },
             order: [['fechaVencimiento', 'ASC']]
         });
         res.json(deudas);
     } catch (error) {
-        res.status(500).json({ message: 'Error al obtener deudas del asociado', error: error.message });
+        res.status(500).json({ 
+            message: 'Error al obtener deudas del asociado', 
+            error: error.message 
+        });
     }
 };
 
-// @desc    Obtener certificados de un asociado específico
+// @desc    Obtener certificados vinculados a un asociado específico
+// @route   GET /api/asociados/:id/certificados
 export const getCertificadosByAsociado = async (req, res) => {
     try {
+        const { id } = req.params;
         const certificados = await Certificado.findAll({
-            where: { asociadoId: req.params.id }
+            where: { asociadoId: id }
         });
         res.json(certificados);
     } catch (error) {
-        res.status(500).json({ message: 'Error al obtener certificados del asociado', error: error.message });
+        res.status(500).json({ 
+            message: 'Error al obtener certificados del asociado', 
+            error: error.message 
+        });
     }
 };
