@@ -72,6 +72,15 @@ const Invoice = sequelize.define('Invoice', {
     type: DataTypes.STRING,
     allowNull: true,
   },
+
+  // =======================================================
+  // NUEVO CAMPO: MONTO BASE DEL FLETE
+  // =======================================================
+  montoFlete: { // Monto Base del Flete (630.00 en el ejemplo)
+    type: DataTypes.FLOAT,
+    defaultValue: 0.00,
+    allowNull: false,
+  },
   
   // =======================================================
   // CAMPOS DE COSTOS Y MONEDA ADICIONALES (AJUSTADOS)
