@@ -50,6 +50,8 @@ app.use(morgan('combined'));
 // Lista de orígenes permitidos.
 const allowedOrigins = [
   'http://api.fraternidad.local',
+  'http://api-asocoop.duckdns.org',
+  'http://asocoop.duckdns.org',
   'http://fraternidad.local',
   'http://localhost:81',
   'http://localhost:3000',
