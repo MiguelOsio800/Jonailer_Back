@@ -46,71 +46,110 @@ export const getInvoices = async (req, res) => {
 };
 
 export const createInvoice = async (req, res) => {
-    const t = await sequelize.transaction();
-    try {
-        const { guide, ...invoiceData } = req.body;
-        const { sender, receiver } = guide;
+    const t = await sequelize.transaction();
+    try {
+        // 1. Extraemos montoFlete y otros valores del body
+        const { guide, montoFlete, insuranceAmount, discountAmount, ...invoiceData } = req.body;
+        const { sender, receiver } = guide;
 
-        if (req.user.roleId !== 'role-admin') {
-            guide.originOfficeId = req.user.officeId;
-        } else if (!guide.originOfficeId) {
-            guide.originOfficeId = req.user.officeId;
-        }
+        // --- Lógica de Oficina (Original) ---
+        if (req.user.roleId !== 'role-admin') {
+            guide.originOfficeId = req.user.officeId;
+        } else if (!guide.originOfficeId) {
+            guide.originOfficeId = req.user.officeId;
+        }
 
-        const getValidClientData = ({ idNumber, clientType, name, phone, address }) => ({
-            idNumber, clientType, name, phone, address
-        });
+        const getValidClientData = ({ idNumber, clientType, name, phone, address }) => ({
+            idNumber, clientType, name, phone, address
+        });
 
-        const [senderClient] = await Client.findOrCreate({
-            where: { idNumber: sender.idNumber },
-            defaults: { ...getValidClientData(sender), id: `C-${Date.now()}` },
-            transaction: t
-        });
-        const [receiverClient] = await Client.findOrCreate({
-            where: { idNumber: receiver.idNumber },
-            defaults: { ...getValidClientData(receiver), id: `C-${Date.now() + 1}` },
-            transaction: t
-        });
+        // --- Persistencia de Clientes (Original) ---
+        const [senderClient] = await Client.findOrCreate({
+            where: { idNumber: sender.idNumber },
+            defaults: { ...getValidClientData(sender), id: `C-${Date.now()}` },
+            transaction: t
+        });
+        const [receiverClient] = await Client.findOrCreate({
+            where: { idNumber: receiver.idNumber },
+            defaults: { ...getValidClientData(receiver), id: `C-${Date.now() + 1}` },
+            transaction: t
+        });
 
-        const userOfficeId = req.user?.officeId;
-        if (!userOfficeId) throw new Error('No se pudo determinar la oficina del usuario.');
+        const userOfficeId = req.user?.officeId;
+        if (!userOfficeId) throw new Error('No se pudo determinar la oficina del usuario.');
 
-        const office = await Office.findByPk(userOfficeId, { transaction: t, lock: t.LOCK.UPDATE });
-        
-        // Validación usando el código de oficina como serie
-        if (!office || !office.code) throw new Error(`La oficina no tiene un CÓDIGO (Serie) asignado.`);
-        
-        const nextInvoiceNum = (office.lastInvoiceNumber || 0) + 1;
-        const newInvoiceNumberFormatted = `${office.code}-${String(nextInvoiceNum).padStart(6, '0')}`;
-        const newControlNumber = String(nextInvoiceNum).padStart(8, '0');
-        
-        office.lastInvoiceNumber = nextInvoiceNum;
-        await office.save({ transaction: t });
+        // --- Numeración y Bloqueo de Oficina (Original) ---
+        const office = await Office.findByPk(userOfficeId, { transaction: t, lock: t.LOCK.UPDATE });
+        if (!office || !office.code) throw new Error(`La oficina no tiene un CÓDIGO (Serie) asignado.`);
+        
+        const nextInvoiceNum = (office.lastInvoiceNumber || 0) + 1;
+        const newInvoiceNumberFormatted = `${office.code}-${String(nextInvoiceNum).padStart(6, '0')}`;
+        const newControlNumber = String(nextInvoiceNum).padStart(8, '0');
+        
+        office.lastInvoiceNumber = nextInvoiceNum;
+        await office.save({ transaction: t });
 
-        const newInvoice = await Invoice.create({
-            id: `INV-${Date.now()}`,
-            invoiceNumber: newInvoiceNumberFormatted,
-            controlNumber: newControlNumber,
-            clientName: senderClient.name,
-            clientIdNumber: senderClient.idNumber,
-            date: invoiceData.date,
-            totalAmount: invoiceData.totalAmount,
-            officeId: userOfficeId,
-            guide: { ...guide, sender: { ...sender, id: senderClient.id }, receiver: { ...receiver, id: receiverClient.id } },
-            status: 'Activa',
-            paymentStatus: 'Pendiente',
-            shippingStatus: 'Pendiente para Despacho',
-            createdByName: invoiceData.createdByName || 'Sistema'
-        }, { transaction: t });
-        
-        await t.commit();
-        res.status(201).json(newInvoice);
+        // =======================================================
+        // NUEVA LÓGICA DE CÁLCULO INTEGRADA
+        // =======================================================
+        
+        // A. Obtener Cargo por Manejo Fijo de la Configuración
+        const company = await CompanyInfo.findByPk(1, { transaction: t });
+        const costoManejoFijo = company ? parseFloat(company.costPerKg || 0) : 0;
 
-    } catch (error) {
-        await t.rollback();
-        console.error('Error al crear la factura:', error);
-        res.status(500).json({ message: error.message || 'Error al crear la factura' });
-    }
+        // B. Cálculos de IPOSTEL basados en el peso (Kg)
+        const pesoKg = parseFloat(guide.weight || 0);
+        const fleteIngresado = parseFloat(montoFlete || 0);
+        let calculadoIpostel = 0;
+
+        // Si el peso es menor o igual a 30.9 Kg, se cobra el 1% del flete
+        if (pesoKg <= 30.9) {
+            calculadoIpostel = fleteIngresado * 0.01;
+        }
+
+        // C. Cálculo del Total Final por Seguridad en Backend
+        const seguro = parseFloat(insuranceAmount || 0);
+        const descuento = parseFloat(discountAmount || 0);
+        const subtotalCalculado = fleteIngresado + costoManejoFijo + calculadoIpostel + seguro;
+        const totalFinal = subtotalCalculado - descuento;
+
+        // --- Creación de Factura (Actualizada con los nuevos campos) ---
+        const newInvoice = await Invoice.create({
+            id: `INV-${Date.now()}`,
+            invoiceNumber: newInvoiceNumberFormatted,
+            controlNumber: newControlNumber,
+            clientName: senderClient.name,
+            clientIdNumber: senderClient.idNumber,
+            date: invoiceData.date,
+            
+            // Montos Desglosados
+            montoFlete: fleteIngresado,    // El monto manual que pediste
+            Montomanejo: costoManejoFijo,  // Cargo fijo desde configuración
+            ipostelFee: calculadoIpostel,  // 1% si peso <= 30.9
+            insuranceAmount: seguro,
+            discountAmount: descuento,
+            totalAmount: totalFinal,       // Suma total calculada aquí
+            
+            officeId: userOfficeId,
+            guide: { 
+                ...guide, 
+                sender: { ...sender, id: senderClient.id }, 
+                receiver: { ...receiver, id: receiverClient.id } 
+            },
+            status: 'Activa',
+            paymentStatus: 'Pendiente',
+            shippingStatus: 'Pendiente para Despacho',
+            createdByName: invoiceData.createdByName || 'Sistema'
+        }, { transaction: t });
+        
+        await t.commit();
+        res.status(201).json(newInvoice);
+
+    } catch (error) {
+        if (t) await t.rollback();
+        console.error('Error al crear la factura:', error);
+        res.status(500).json({ message: error.message || 'Error al crear la factura' });
+    }
 };
 
 export const updateInvoice = async (req, res) => {

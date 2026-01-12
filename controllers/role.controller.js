@@ -15,14 +15,17 @@ export const getRoles = async (req, res) => {
 // @route   POST /api/roles
 export const createRole = async (req, res) => {
     const { name } = req.body;
-    if (!name) {
-        return res.status(400).json({ message: 'El nombre del rol es obligatorio.' });
-    }
+    if (!name) return res.status(400).json({ message: 'Nombre obligatorio.' });
+
     try {
+        // Creamos un ID basado en el nombre (ej: "Operador" -> "role-operador")
+        const slug = name.toLowerCase().replace(/ /g, '-');
+        const roleId = `role-${slug}-${Date.now().toString().slice(-4)}`; 
+
         const newRole = await Role.create({
-            id: `role-${Date.now()}`,
+            id: roleId,
             name,
-            permissions: {}, // Se inicializa vacío, los permisos se asignan por separado
+            permissions: {},
         });
         res.status(201).json(newRole);
     } catch (error) {

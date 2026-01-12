@@ -1,23 +1,26 @@
 import express from 'express';
 import { getRoles, createRole, updateRole, deleteRole, updateRolePermissions } from '../controllers/role.controller.js';
+import { getMe } from '../controllers/auth.controller.js'; 
 import { protect, authorize } from '../middleware/auth.middleware.js';
 
 const router = express.Router();
 
 router.use(protect);
-// Se requiere este permiso para cualquier acción sobre roles
-router.use(authorize('config.roles.manage')); 
 
+// RUTA PARA EL USUARIO ACTUAL (Sin authorize global)
+// Esto permite que el front cargue los permisos del usuario logueado
+router.get('/me', getMe); 
+
+// RUTAS ADMINISTRATIVAS (Aquí sí aplicamos authorize individualmente)
 router.route('/')
-    .get(getRoles)
-    .post(createRole);
+    .get(authorize('config.roles.manage'), getRoles)
+    .post(authorize('config.roles.manage'), createRole);
 
 router.route('/:id')
-    .put(updateRole)
-    .delete(deleteRole);
+    .put(authorize('config.roles.manage'), updateRole)
+    .delete(authorize('config.roles.manage'), deleteRole);
 
-// AÑADIMOS LA RUTA QUE FALTABA
 router.route('/:id/permissions')
-    .put(updateRolePermissions);
+    .put(authorize('config.roles.manage'), updateRolePermissions);
 
 export default router;

@@ -1,11 +1,5 @@
 import { Op } from 'sequelize';
-import {
-    Asociado,
-    Certificado,
-    PagoAsociado,
-    ReciboPagoAsociado,
-    sequelize
-} from '../models/index.js';
+import { Asociado, Certificado, PagoAsociado, ReciboPagoAsociado, Vehicle, sequelize } from '../models/index.js';
 
 // --- CRUD para Asociados ---
 

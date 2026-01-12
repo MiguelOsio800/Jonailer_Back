@@ -44,20 +44,35 @@ export const protect = async (req, res, next) => {
 
 
 // Middleware para autorizar basado en permisos específicos (no necesita cambios).
+
+
 export const authorize = (...requiredPermissions) => {
     return (req, res, next) => {
-        if (!req.user || !req.user.Role) {
-            return res.status(403).json({ message: 'Acceso prohibido. No se pudo determinar el rol del usuario.' });
+        // 1. Verificación de seguridad
+        if (!req.user) {
+            return res.status(401).json({ message: 'No autorizado.' });
         }
 
+        // 2. IMPORTANTE: Si el objeto Role no existe en el usuario, es un error de DB
+        if (!req.user.Role) {
+            return res.status(403).json({ 
+                message: 'Acceso prohibido. El usuario no tiene un rol válido asignado en la base de datos.' 
+            });
+        }
+
+        // 3. BYPASS DE SUPERUSUARIO: 
+        // Buscamos si el ID contiene 'admin' o 'tech' para ser flexibles con tus IDs dinámicos
+        const roleId = req.user.Role.id.toLowerCase();
+        if (roleId.includes('admin') || roleId.includes('tech')) {
+            return next();
+        }
+
+        // 4. Verificación de permisos para usuarios normales
         const userPermissions = req.user.Role.permissions || {};
-        
-        const hasPermission = requiredPermissions.some(
-            (p) => userPermissions[p] === true
-        );
+        const hasPermission = requiredPermissions.some(p => userPermissions[p] === true);
         
         if (!hasPermission) {
-            return res.status(403).json({ message: 'No tiene los permisos necesarios para realizar esta acción.' });
+            return res.status(403).json({ message: 'No tienes los permisos necesarios para este módulo.' });
         }
 
         next();
