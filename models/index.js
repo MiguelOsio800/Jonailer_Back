@@ -93,6 +93,9 @@ CuentaContable.hasMany(AsientoManualEntry, { foreignKey: 'cuentaId' });
 AsientoManual.belongsTo(User, { as: 'createdBy', foreignKey: 'userId' });
 User.hasMany(AsientoManual, { foreignKey: 'userId' });
 
+Asociado.hasMany(Certificado, { foreignKey: 'asociadoId' });
+Certificado.belongsTo(Asociado, { foreignKey: 'asociadoId' });
+
 // --- Sincronización de la Base de Datos ---
 const syncDatabase = async () => {
     try {

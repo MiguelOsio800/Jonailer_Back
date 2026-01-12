@@ -83,16 +83,16 @@ export const updateRolePermissions = async (req, res) => {
     try {
         const role = await Role.findByPk(req.params.id);
         if (role) {
-            role.permissions = permissions || {}; // Actualizamos solo los permisos
+            role.permissions = permissions || {}; 
+            // Indica a Sequelize que el campo JSONB ha sido modificado
+            role.changed('permissions', true); 
             await role.save();
-            // ¡Importante! Sequelize a veces no refleja el cambio en JSONB inmediatamente.
-            // Recargamos el objeto para asegurar que la respuesta sea correcta.
             await role.reload();
             res.json(role);
         } else {
             res.status(404).json({ message: 'Rol no encontrado' });
         }
     } catch (error) {
-        res.status(500).json({ message: 'Error al actualizar los permisos del rol', error: error.message });
+        res.status(500).json({ message: 'Error al actualizar los permisos', error: error.message });
     }
 };

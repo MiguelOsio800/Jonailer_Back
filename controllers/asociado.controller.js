@@ -209,15 +209,18 @@ export const getDeudasByAsociado = async (req, res) => {
 // @route   GET /api/asociados/:id/certificados
 export const getCertificadosByAsociado = async (req, res) => {
     try {
-        const { id } = req.params;
+        const { id } = req.params; // ID del asociado
+        
         const certificados = await Certificado.findAll({
-            where: { asociadoId: id }
+            include: {
+                model: Vehicle,
+                where: { asociadoId: id }, // Filtramos por el dueño del vehículo
+                attributes: [] // No necesitamos traer los datos del vehículo, solo filtrar
+            }
         });
+        
         res.json(certificados);
     } catch (error) {
-        res.status(500).json({ 
-            message: 'Error al obtener certificados del asociado', 
-            error: error.message 
-        });
+        res.status(500).json({ message: 'Error al obtener certificados', error: error.message });
     }
 };
