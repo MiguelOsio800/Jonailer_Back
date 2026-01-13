@@ -49,7 +49,7 @@ export const createInvoice = async (req, res) => {
     const t = await sequelize.transaction();
     try {
         // 1. Extraemos montoFlete y otros valores del body
-        const { guide, montoFlete, insuranceAmount, discountAmount, ...invoiceData } = req.body;
+        const { guide, montoFlete, insuranceAmount, discountAmount,specificDestination, ...invoiceData } = req.body;
         const { sender, receiver } = guide;
 
         // --- Lógica de Oficina (Original) ---

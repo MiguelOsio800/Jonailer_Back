@@ -114,12 +114,20 @@ const Invoice = sequelize.define('Invoice', {
     defaultValue: 0.00,
     allowNull: false,
   },
-  discountPercentage: { // Porcentaje aplicado (para referencia)
+  // models/Invoice.js
+// ... (al final de los campos, antes de timestamps)
+
+  discountPercentage: {
     type: DataTypes.FLOAT,
     defaultValue: 0.00,
     allowNull: false,
+  },
+  
+  // NUEVO CAMPO PARA LA RUTA
+  specificDestination: {
+    type: DataTypes.STRING, // Permite texto, números y símbolos
+    allowNull: true,
   }
-
 }, {
   timestamps: true,
 });
