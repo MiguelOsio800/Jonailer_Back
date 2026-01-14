@@ -36,3 +36,20 @@ export const createAuditLog = async (req, res) => {
         res.status(500).json({ message: 'Error al crear el registro de auditoría', error: error.message });
     }
 };
+
+export const logAppError = async (req, res) => {
+    try {
+        const { error, stack, component } = req.body;
+        
+        await AuditLog.create({
+            userId: req.user ? req.user.id : 'anonymous',
+            action: 'ERROR_APLICACION',
+            details: `Error en ${component}: ${error} | Stack: ${stack}`,
+            ipAddress: req.ip
+        });
+
+        res.status(200).json({ message: 'Error registrado en auditoría' });
+    } catch (err) {
+        res.status(500).json({ message: 'Error al registrar auditoría' });
+    }
+};
