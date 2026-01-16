@@ -24,21 +24,58 @@ export const getVehicles = async (req, res) => {
 };
 
 export const createVehicle = async (req, res) => {
-    const { asociadoId, placa, modelo, capacidadCarga } = req.body;
-    if (!asociadoId || !placa || !modelo || !capacidadCarga) {
+    // 1. Extraemos los campos mínimos indispensables
+    const { placa, modelo } = req.body;
+    
+    // 2. Lógica de "Matrimonio" con el Asociado:
+    // Prioridad 1: Si el ID viene explícitamente en el cuerpo del JSON (body)
+    // Prioridad 2: Si no viene, lo tomamos del token del usuario autenticado (si es un asociado)
+    let finalAsociadoId = req.body.asociadoId;
+
+    if (!finalAsociadoId && req.user && req.user.asociadoId) {
+        finalAsociadoId = req.user.asociadoId;
+    }
+
+    // 3. Validación estricta de pertenencia
+    if (!finalAsociadoId) {
         return res.status(400).json({ 
-            message: 'Faltan campos obligatorios. Asegúrese de proporcionar asociado, placa, modelo y capacidad de carga.' 
+            message: 'El vehículo debe estar vinculado a un asociado (asociadoId no encontrado).' 
         });
     }
-    try {
-        const newVehicle = await Vehicle.create({ 
-            id: `v-${Date.now()}`, 
-            ...req.body 
+
+    // 4. Validación de datos mínimos requeridos por el modelo
+    if (!placa || !modelo) {
+        return res.status(400).json({ 
+            message: 'Faltan campos requeridos: placa y modelo son obligatorios.' 
         });
+    }
+
+    try {
+        // 5. Creación del registro en la base de datos
+        // Usamos el spread (...req.body) para capturar cualquier otro dato opcional (conductor, capacidad, etc.)
+        const newVehicle = await Vehicle.create({ 
+            ...req.body,
+            id: `v-${Date.now()}`, // Generación de ID interno
+            asociadoId: finalAsociadoId, // Aseguramos la relación con el socio
+            status: req.body.status || 'Disponible' // Estado inicial automático
+        });
+
         res.status(201).json(newVehicle);
+
     } catch (error) {
-        console.error('Error al crear vehículo:', error); 
-        res.status(500).json({ message: 'Error al crear vehículo', error: error.message });
+        console.error('Error al crear vehículo:', error);
+
+        // Manejo específico si la placa ya existe (definida como unique en el modelo)
+        if (error.name === 'SequelizeUniqueConstraintError') {
+            return res.status(400).json({ 
+                message: 'Error: Ya existe un vehículo registrado con esa placa.' 
+            });
+        }
+
+        res.status(500).json({ 
+            message: 'Error interno al procesar el registro del vehículo', 
+            error: error.message 
+        });
     }
 };
 

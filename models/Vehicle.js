@@ -6,7 +6,8 @@ const Vehicle = sequelize.define('Vehicle', {
         type: DataTypes.STRING,
         primaryKey: true,
     },
-    asociadoId: { // Clave foránea para la relación con Asociado
+    asociadoId: { 
+        // Se mantiene obligatorio para asegurar que cada vehículo pertenezca a un dueño
         type: DataTypes.STRING,
         allowNull: false,
     },
@@ -19,28 +20,71 @@ const Vehicle = sequelize.define('Vehicle', {
         type: DataTypes.STRING,
         allowNull: false,
     },
-    ano: DataTypes.INTEGER,
-    color: DataTypes.STRING,
-    serialCarroceria: DataTypes.STRING,
-    serialMotor: DataTypes.STRING,
-    tipo: DataTypes.STRING,
-    uso: DataTypes.STRING,
-    servicio: DataTypes.STRING,
-    nroPuestos: DataTypes.INTEGER,
-    nroEjes: DataTypes.INTEGER,
-    tara: DataTypes.FLOAT,
+    ano: {
+        type: DataTypes.INTEGER,
+        allowNull: true, // Permite registro rápido sin año
+    },
+    color: {
+        type: DataTypes.STRING,
+        allowNull: true,
+    },
+    serialCarroceria: {
+        type: DataTypes.STRING,
+        allowNull: true,
+    },
+    serialMotor: {
+        type: DataTypes.STRING,
+        allowNull: true,
+    },
+    tipo: {
+        type: DataTypes.STRING,
+        allowNull: true,
+    },
+    uso: {
+        type: DataTypes.STRING,
+        allowNull: true,
+    },
+    servicio: {
+        type: DataTypes.STRING,
+        allowNull: true,
+    },
+    nroPuestos: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+    },
+    nroEjes: {
+        type: DataTypes.INTEGER,
+        allowNull: true,
+    },
+    tara: {
+        type: DataTypes.FLOAT,
+        allowNull: true,
+    },
     capacidadCarga: {
         type: DataTypes.FLOAT,
-        allowNull: false,
+        allowNull: true, // Flexibilizado para el registro simplificado del frontend
+        defaultValue: 0,
     },
-    clase: DataTypes.STRING,
-    actividadVehiculo: DataTypes.STRING,
+    clase: {
+        type: DataTypes.STRING,
+        allowNull: true,
+    },
+    actividadVehiculo: {
+        type: DataTypes.STRING,
+        allowNull: true,
+    },
     status: {
         type: DataTypes.ENUM('Disponible', 'En Ruta', 'En Mantenimiento'),
-        defaultValue: 'Disponible',
+        defaultValue: 'Disponible', // Valor inicial automático
     },
-    driver: DataTypes.STRING,
-    imageUrl: DataTypes.TEXT,
+    driver: {
+        type: DataTypes.STRING,
+        allowNull: true, // El conductor puede asignarse luego
+    },
+    imageUrl: {
+        type: DataTypes.TEXT,
+        allowNull: true,
+    },
 });
 
 export default Vehicle;
