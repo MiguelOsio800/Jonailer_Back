@@ -123,6 +123,13 @@ export const createInvoice = async (req, res) => {
             clientIdNumber: senderClient.idNumber,
             clientEmail: senderClient.email,
             date: invoiceData.date,
+
+            // === NUEVOS CAMPOS DEL DESTINATARIO ===
+            receiverName: receiverClient.name,
+            receiverIdNumber: receiverClient.idNumber,
+            receiverAddress: receiverClient.address,
+            receiverPhone: receiverClient.phone,
+            receiverEmail: receiverClient.email,
             
             // Montos Desglosados
             montoFlete: fleteIngresado,    // El monto manual que pediste

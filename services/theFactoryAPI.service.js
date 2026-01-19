@@ -332,19 +332,23 @@ const sendInvoiceToHKA = async (invoice) => {
                     // --- NUEVOS CAMPOS DEL DESTINATARIO ---
                     {
                         "Campo": "Destinatario",
-                        "Valor": receiver?.name || 'N/A'
+                        "Valor": invoice.receiverName || 'N/A'
                     },
                     {
                         "Campo": "ID Destinatario",
-                        "Valor": receiver?.idNumber || 'N/A'
+                        "Valor": invoice.receiverIdNumber || 'N/A'
                     },
                     {
                         "Campo": "Dirección Destino",
-                        "Valor": receiver?.address || 'N/A'
+                        "Valor": invoice.receiverAddress || 'N/A'
                     },
                     {
                         "Campo": "Teléfono Destino",
-                        "Valor": receiver?.phone || 'N/A'
+                        "Valor": invoice.receiverPhone || 'N/A'
+                    },
+                    {
+                        "Campo": "Correo Destino",
+                        "Valor": invoice.receiverEmail || 'N/A'
                     },
                     // --- FIN CAMPOS DESTINATARIO ---
                     {

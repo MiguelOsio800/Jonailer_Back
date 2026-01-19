@@ -127,7 +127,30 @@ const Invoice = sequelize.define('Invoice', {
   specificDestination: {
     type: DataTypes.STRING, // Permite texto, números y símbolos
     allowNull: true,
-  }
+  },
+
+  // CAMPOS DEL QUE RECIBE
+
+  receiverName: {
+    type: DataTypes.STRING,
+    allowNull: true // Obligatorio para asegurar consistencia
+  },
+  receiverIdNumber: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  receiverAddress: {
+    type: DataTypes.TEXT,
+    allowNull: true
+  },
+  receiverPhone: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
+  receiverEmail: {
+    type: DataTypes.STRING,
+    allowNull: true
+  },
 }, {
   timestamps: true,
 });
