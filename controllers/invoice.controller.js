@@ -1,6 +1,7 @@
 import { Invoice, CompanyInfo, Client, Office, sequelize } from '../models/index.js'; // Importar Office
-import { sendInvoiceToHKA, sendCreditNoteToHKA, sendDebitNoteToHKA } from '../services/theFactoryAPI.service.js';
+import { sendInvoiceToHKA, sendCreditNoteToHKA, sendDebitNoteToHKA, voidInvoiceInHKA } from '../services/theFactoryAPI.service.js';
 import { Op } from 'sequelize'; // Importamos Op para usar OR
+
 
 export const getInvoices = async (req, res) => {
     try {
@@ -120,6 +121,7 @@ export const createInvoice = async (req, res) => {
             controlNumber: newControlNumber,
             clientName: senderClient.name,
             clientIdNumber: senderClient.idNumber,
+            clientEmail: senderClient.email,
             date: invoiceData.date,
             
             // Montos Desglosados
@@ -153,21 +155,30 @@ export const createInvoice = async (req, res) => {
 };
 
 export const updateInvoice = async (req, res) => {
-    try {
-        const invoice = await Invoice.findByPk(req.params.id);
-        if (!invoice) return res.status(404).json({ message: 'Factura no encontrada' });
-        
+    try {
+        const invoice = await Invoice.findByPk(req.params.id);
+        if (!invoice) return res.status(404).json({ message: 'Factura no encontrada' });
+        
+        // --- LOGICA DE CONGELADO: Respetamos la tasa original guardada ---
+        // Prioridad: 1. La tasa enviada en el body (si se quiere cambiar manual)
+        //            2. La tasa que ya tiene la factura grabada
+        const rateToUse = req.body.exchangeRate || invoice.exchangeRate;
+
         // Actualiza el registro con los nuevos campos de costos, etc.
-        await invoice.update(req.body);
+        // Forzamos el uso de rateToUse para evitar que se pierda o resetee
+        await invoice.update({
+            ...req.body,
+            exchangeRate: rateToUse
+        });
         
         // CRÍTICO: Recarga la instancia para asegurar que todos los datos recién guardados sean devueltos al frontend
         // Esto le da al frontend la instancia más fresca para su siguiente llamada a 'sendInvoiceToTheFactory'
         const freshInvoice = await Invoice.findByPk(req.params.id, { include: [Office] });
-        
+        
         res.json(freshInvoice);
-    } catch (error) {
-        res.status(500).json({ message: 'Error al actualizar', error: error.message });
-    }
+    } catch (error) {
+        res.status(500).json({ message: 'Error al actualizar', error: error.message });
+    }
 };
 
 export const deleteInvoice = async (req, res) => {

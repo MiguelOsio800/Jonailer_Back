@@ -8,6 +8,7 @@ dotenv.config();
 // --- CONFIGURACIÓN DE URLS ---
 const API_URL_AUTH = 'https://demoemisionv2.thefactoryhka.com.ve/api/Autenticacion';
 const API_URL_EMISION = 'https://demoemisionv2.thefactoryhka.com.ve/api/Emision';
+const API_URL_ANULACION = 'https://demoemisionv2.thefactoryhka.com.ve/api/Anulacion';
 
 // --- CACHÉ DE TOKEN ---
 let cachedToken = {
@@ -189,6 +190,10 @@ const sendInvoiceToHKA = async (invoice) => {
         // 1. OBTENER VALORES Y CÁLCULO DE TOTALES (USANDO CAMPOS EXACTOS DEL MODELO)
         const totalGeneral = parseFloat(invoice.totalAmount || 0); // MONTO TOTAL FINAL (Total A Pagar)
         
+        // --- EXTRAER REMITENTE Y DESTINATARIO DE LA GUÍA ---
+        const sender = invoice.guide?.sender;
+        const receiver = invoice.guide?.receiver;
+
         // Costos Adicionales (NOMBRES EXACTOS DEL MODELO)
         const montoFlete = parseFloat(invoice.montoFlete || 0.00); // Monto Base del Flete
         const manejo = parseFloat(invoice.Montomanejo || 0.00); 
@@ -295,9 +300,9 @@ const sendInvoiceToHKA = async (invoice) => {
                         "TipoIdentificacion": idType,
                         "NumeroIdentificacion": invoice.clientIdNumber, 
                         "RazonSocial": invoice.clientName, 
-                        "Direccion": invoice.guide?.receiver?.address || 'N/A', 
+                        "Direccion": sender?.address || 'N/A', // Cambiado a datos del remitente
                         "Pais": "VE",
-                        "Telefono": [invoice.guide?.receiver?.phone || '0000-0000000'], 
+                        "Telefono": [sender?.phone || '0000-0000000'], // Cambiado a datos del remitente
                         "Correo": [clientEmailToSend] 
                     },
                     "Totales": {
@@ -324,6 +329,24 @@ const sendInvoiceToHKA = async (invoice) => {
                 },
                 "DetallesItems": detalles,
                 "InfoAdicional": [ 
+                    // --- NUEVOS CAMPOS DEL DESTINATARIO ---
+                    {
+                        "Campo": "Destinatario",
+                        "Valor": receiver?.name || 'N/A'
+                    },
+                    {
+                        "Campo": "ID Destinatario",
+                        "Valor": receiver?.idNumber || 'N/A'
+                    },
+                    {
+                        "Campo": "Dirección Destino",
+                        "Valor": receiver?.address || 'N/A'
+                    },
+                    {
+                        "Campo": "Teléfono Destino",
+                        "Valor": receiver?.phone || 'N/A'
+                    },
+                    // --- FIN CAMPOS DESTINATARIO ---
                     {
                         "Campo": "Manejo",
                         "Valor": manejoValue 
@@ -483,20 +506,20 @@ const sendNoteToHKA = async (invoice, noteDetails, docType) => {
                     },
                     "Emisor": {
                         "TipoIdentificacion": (companyInfo.rif.charAt(0) || 'J').toUpperCase(),
-                        "NumeroIdentificacion": companyInfo.rif,
+                        "NumeroIdentificacion": companyInfo.rif.replace(/\D/g, ''),
                         "RazonSocial": companyInfo.name,
                         "Direccion": companyInfo.address,
                         "Telefono": [companyInfo.phone]
                     },
                     "Comprador": {
                         "TipoIdentificacion": (invoice.clientIdNumber.charAt(0) || 'V').toUpperCase(),
-                        "NumeroIdentificacion": invoice.clientIdNumber,
-                        "RazonSocial": invoice.clientName,
-                        "Direccion": invoice.guide?.receiver?.address || 'N/A',
+                        "NumeroIdentificacion": invoice.clientIdNumber.replace(/\D/g, ''), // Limpia letras y guiones
+                        "RazonSocial": invoice.clientName, 
+                        "Direccion": invoice.guide?.sender?.address || 'N/A', // <-- CAMBIADO A SENDER
                         "Pais": "VE",
-                        "Telefono": [invoice.guide?.receiver?.phone || '0000-0000000'],
+                        "Telefono": [invoice.guide?.sender?.phone || '0000-0000000'], // <-- CAMBIADO A SENDER
                         "Correo": [clientEmailToSend] 
-                    },
+                 },
                     "Totales": {
                         "NroItems": detalles.length.toString(),
                         "MontoGravadoTotal": "0.00", 
@@ -572,11 +595,48 @@ const handleHkaError = (error) => {
     throw new Error(detailedError);
 };
 
+const voidInvoiceInHKA = async (invoice) => {
+    try {
+        const token = await getAuthToken();
+        const office = invoice.Office;
+        
+        if (!office?.code) {
+            throw new Error(`La oficina asociada no tiene un CÓDIGO (Serie) asignado.`);
+        }
+
+        const numero = invoice.invoiceNumber.split('-')[1] || invoice.invoiceNumber;
+
+        // Endpoint de anulación de The Factory HKA
+        const API_URL_ANULACION = 'https://demoemisionv2.thefactoryhka.com.ve/api/Anulacion';
+
+        const payload = {
+            "TipoDocumento": "01", 
+            "Serie": office.code,
+            "NumeroDocumento": numero,
+            "Motivo": "Anulación por error administrativo"
+        };
+
+        console.log(`[HKA] Solicitando anulación de factura: ${invoice.invoiceNumber}`);
+        
+        const response = await axios.post(API_URL_ANULACION, payload, {
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            }
+        });
+
+        return response.data;
+    } catch (error) {
+        handleHkaError(error);
+    }
+};
+
 // ==========================================================
 // EXPORTACIONES FINALES (CORRECCIÓN DE SyntaxError)
 // ==========================================================
 export {
     sendInvoiceToHKA,
     sendCreditNoteToHKA,
-    sendDebitNoteToHKA
+    sendDebitNoteToHKA,
+    voidInvoiceInHKA
 };
