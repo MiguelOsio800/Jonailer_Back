@@ -125,6 +125,7 @@ export const createInvoice = async (req, res) => {
             date: invoiceData.date,
 
             // === NUEVOS CAMPOS DEL DESTINATARIO ===
+            specificDestination: specificDestination, // AGREGA ESTA LÍNEA
             receiverName: receiverClient.name,
             receiverIdNumber: receiverClient.idNumber,
             receiverAddress: receiverClient.address,
@@ -138,8 +139,8 @@ export const createInvoice = async (req, res) => {
             insuranceAmount: seguro,
             discountAmount: descuento,
             totalAmount: totalFinal,       // Suma total calculada aquí
-            
             officeId: userOfficeId,
+
             guide: { 
                 ...guide, 
                 sender: { ...sender, id: senderClient.id }, 
@@ -189,14 +190,29 @@ export const updateInvoice = async (req, res) => {
 };
 
 export const deleteInvoice = async (req, res) => {
-    try {
-        const invoice = await Invoice.findByPk(req.params.id);
-        if (!invoice) return res.status(404).json({ message: 'Factura no encontrada' });
-        await invoice.destroy();
-        res.json({ message: 'Factura eliminada' });
-    } catch (error) {
-        res.status(500).json({ message: 'Error al eliminar', error: error.message });
-    }
+    try {
+        // 1. Buscamos la factura incluyendo la Oficina para tener la Serie (code)
+        const invoice = await Invoice.findByPk(req.params.id, { include: [Office] });
+        if (!invoice) return res.status(404).json({ message: 'Factura no encontrada' });
+
+        // 2. LLAMADA AL ENDPOINT DE ANULACIÓN DE HKA
+        // Esta función usa el API_URL_ANULACION que mencionaste
+        const hkaResponse = await voidInvoiceInHKA(invoice);
+
+        // 3. Acción local: En lugar de destroy (borrar), cambiamos el status a 'Anulada'
+        // Esto es mejor para la integridad contable
+        await invoice.update({ status: 'Anulada' });
+
+        res.json({ 
+            message: 'Factura anulada con éxito en sistema y HKA', 
+            hkaResponse 
+        });
+    } catch (error) {
+        console.error(`[HKA Void Error]:`, error.message);
+        res.status(500).json({ 
+            message: 'No se pudo anular en HKA: ' + error.message 
+        });
+    }
 };
 
 // --- ENVÍO DE FACTURA A HKA (CORRECCIÓN DE CARRERA/RACE CONDITION) ---

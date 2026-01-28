@@ -8,7 +8,7 @@ dotenv.config();
 // --- CONFIGURACIÓN DE URLS ---
 const API_URL_AUTH = 'https://demoemisionv2.thefactoryhka.com.ve/api/Autenticacion';
 const API_URL_EMISION = 'https://demoemisionv2.thefactoryhka.com.ve/api/Emision';
-const API_URL_ANULACION = 'https://demoemisionv2.thefactoryhka.com.ve/api/Anulacion';
+const API_URL_ANULACION = 'https://demoemisionv2.thefactoryhka.com.ve/api/Anular';
 
 // --- CACHÉ DE TOKEN ---
 let cachedToken = {
@@ -300,74 +300,54 @@ const sendInvoiceToHKA = async (invoice) => {
                         "TipoIdentificacion": idType,
                         "NumeroIdentificacion": invoice.clientIdNumber, 
                         "RazonSocial": invoice.clientName, 
-                        "Direccion": sender?.address || 'N/A', // Cambiado a datos del remitente
+                        "Direccion": invoice.guide?.sender?.address || 'N/A', 
                         "Pais": "VE",
-                        "Telefono": [sender?.phone || '0000-0000000'], // Cambiado a datos del remitente
+                        "Telefono": [invoice.guide?.sender?.phone || '0000-0000000'],
                         "Correo": [clientEmailToSend] 
                     },
                     "Totales": {
                         "NroItems": detalles.length.toString(),
                         "MontoGravadoTotal": "0.00", 
-                        "MontoExentoTotal": baseExentaHKA.toFixed(2).toString(), // Base unificada para pasar [1009]
-                        "Subtotal": baseExentaHKA.toFixed(2).toString(), // Base unificada
+                        "MontoExentoTotal": baseExentaHKA.toFixed(2).toString(),
+                        "Subtotal": baseExentaHKA.toFixed(2).toString(),
                         "TotalIVA": "0.00", 
-                        "MontoTotalConIVA": totalAntesDescuento.toFixed(2).toString(), // Total Antes Descuento
-                        "TotalAPagar": totalGeneral.toFixed(2).toString(), // Monto final
+                        "MontoTotalConIVA": totalAntesDescuento.toFixed(2).toString(),
+                        "TotalAPagar": totalGeneral.toFixed(2).toString(),
                         "MontoEnLetras": NumerosALetras(totalGeneral, { 
                             plural: "bolívares", singular: "bolívar", centPlural: "céntimos", centSingular: "céntimo"
                         }),
                         "FormasPago": [{ "Forma": "01", "Monto": totalGeneral.toFixed(2).toString(), "Moneda": "VES" }],
-                        "TotalDescuento": descuentoMontoValue, // Incluido el monto de descuento en VES
+                        "TotalDescuento": descuentoMontoValue,
                         "ImpuestosSubtotal": [{ 
                             "CodigoTotalImp": EXENTO_CODE, 
                             "AlicuotaImp": "0.00", 
-                            "BaseImponibleImp": baseExentaHKA.toFixed(2).toString(), // Base unificada para pasar [1009]
+                            "BaseImponibleImp": baseExentaHKA.toFixed(2).toString(),
                             "ValorTotalImp": "0.00" 
                         }]
                     },
                     "TotalesOtraMoneda": totalesOtraMoneda
                 },
                 "DetallesItems": detalles,
-                "InfoAdicional": [ 
-                    // --- NUEVOS CAMPOS DEL DESTINATARIO ---
-                    {
-                        "Campo": "Destinatario",
-                        "Valor": invoice.receiverName || 'N/A'
-                    },
-                    {
-                        "Campo": "ID Destinatario",
-                        "Valor": invoice.receiverIdNumber || 'N/A'
-                    },
-                    {
-                        "Campo": "Dirección Destino",
-                        "Valor": invoice.receiverAddress || 'N/A'
-                    },
-                    {
-                        "Campo": "Teléfono Destino",
-                        "Valor": invoice.receiverPhone || 'N/A'
-                    },
-                    {
-                        "Campo": "Correo Destino",
-                        "Valor": invoice.receiverEmail || 'N/A'
-                    },
-                    // --- FIN CAMPOS DESTINATARIO ---
-                    {
-                        "Campo": "Manejo",
-                        "Valor": manejoValue 
-                    },
-                    {
-                        "Campo": "Seguro",
-                        "Valor": seguroValue 
-                    },
-                    {
-                        "Campo": "Ipostel",
-                        "Valor": ipostelValue 
-                    },
-                    {
-                        "Campo": "Descuento Porc.",
-                        "Valor": descuentoPorcValue + "%"
-                    }
-                ]
+"InfoAdicional": [
+    { "Campo": "Oficina", "Valor": invoice.Office?.name || 'N/A' },
+    { "Campo": "Ruta", "Valor": invoice.specificDestination || 'N/A' },
+    { "Campo": "Condicion", "Valor": invoice.paymentStatus === 'Pagada' ? 'Flete pagado' : 'Flete por cobrar' },
+    { "Campo": "Moneda", "Valor": invoice.exchangeRate > 1 ? 'Dólares' : 'Bolívares' },
+    { "Campo": "Asegurado", "Valor": invoice.guide?.hasInsurance ? 'SI' : 'NO' },
+    { "Campo": "Declarado", "Valor": invoice.guide?.declaredValue?.toString() || 'n/a' },
+    { "Campo": "Recogida", "Valor": invoice.guide?.pickupOrder || 'N/A' },
+    { "Campo": "Transbordo", "Valor": invoice.guide?.isTransbordo ? 'Si' : 'No' },
+    // Datos del Remitente (según el JSON de HKA)
+    { "Campo": "Remitente", "Valor": invoice.clientName },
+    { "Campo": "IDRemitente", "Valor": invoice.clientIdNumber },
+    { "Campo": "DirRemitente", "Valor": invoice.guide?.sender?.address || 'N/A' },
+    { "Campo": "TelRemitente", "Valor": invoice.guide?.sender?.phone || 'N/A' },
+    { "Campo": "CorRemitente", "Valor": invoice.clientEmail || 'N/A' },
+    // Costos
+    { "Campo": "Manejo", "Valor": manejoValue },
+    { "Campo": "Seguro", "Valor": seguroValue },
+    { "Campo": "Ipostel", "Valor": ipostelValue }
+]
             }
         };
 
@@ -604,24 +584,19 @@ const voidInvoiceInHKA = async (invoice) => {
         const token = await getAuthToken();
         const office = invoice.Office;
         
-        if (!office?.code) {
-            throw new Error(`La oficina asociada no tiene un CÓDIGO (Serie) asignado.`);
-        }
+        if (!office?.code) throw new Error('La oficina no tiene Serie.');
 
         const numero = invoice.invoiceNumber.split('-')[1] || invoice.invoiceNumber;
 
-        // Endpoint de anulación de The Factory HKA
-        const API_URL_ANULACION = 'https://demoemisionv2.thefactoryhka.com.ve/api/Anulacion';
-
         const payload = {
-            "TipoDocumento": "01", 
+            "TipoDocumento": "01",
             "Serie": office.code,
             "NumeroDocumento": numero,
-            "Motivo": "Anulación por error administrativo"
+            "MotivoAnulacion": "Anulación por error administrativo" // <-- CAMBIA "Motivo" POR "MotivoAnulacion"
         };
 
-        console.log(`[HKA] Solicitando anulación de factura: ${invoice.invoiceNumber}`);
-        
+        console.log("🚀 Payload enviado a HKA para anular:", JSON.stringify(payload, null, 2));
+
         const response = await axios.post(API_URL_ANULACION, payload, {
             headers: {
                 'Authorization': `Bearer ${token}`,
