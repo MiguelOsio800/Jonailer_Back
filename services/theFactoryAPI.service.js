@@ -9,6 +9,7 @@ dotenv.config();
 const API_URL_AUTH = 'https://demoemisionv2.thefactoryhka.com.ve/api/Autenticacion';
 const API_URL_EMISION = 'https://demoemisionv2.thefactoryhka.com.ve/api/Emision';
 const API_URL_ANULACION = 'https://demoemisionv2.thefactoryhka.com.ve/api/Anular';
+const API_URL_DESCARGA = 'https://demoemisionv2.thefactoryhka.com.ve/api/Descarga'; // <--- [NUEVO] URL DE DESCARGA
 
 // --- CACHÉ DE TOKEN ---
 let cachedToken = {
@@ -361,6 +362,19 @@ const sendInvoiceToHKA = async (invoice) => {
             };
         }
 
+        // AGREGAR TASA BCV Y EQUIVALENTE EN $ A INFO ADICIONAL
+        if (exchangeRate > 0) {
+             additionalInfoFields.push({
+                "Campo": "Tasa BCV",
+                "Valor": exchangeRateFixed
+            });
+            additionalInfoFields.push({
+                "Campo": "Equivalente $",
+                "Valor": (totalGeneral / exchangeRate).toFixed(2)
+            });
+        }
+        // ----------------------------------------------------------------
+
         // --- 10. PAYLOAD FINAL ---
         const hkaPayload = {
             "DocumentoElectronico": {
@@ -598,6 +612,19 @@ const sendNoteToHKA = async (invoice, noteDetails, docType) => {
             });
         });
 
+        // AGREGAR TASA BCV Y EQUIVALENTE EN $ A INFO ADICIONAL (EN NOTAS)
+        if (exchangeRate > 0) {
+             additionalInfoFields.push({
+                "Campo": "Tasa BCV",
+                "Valor": exchangeRateFixed
+            });
+            additionalInfoFields.push({
+                "Campo": "Equivalente $",
+                "Valor": (totalGeneral / exchangeRate).toFixed(2)
+            });
+        }
+        // ----------------------------------------------------------------------------
+
         // BLINDAJE ID PARA NOTAS (COMPRADOR = SENDER)
         let cleanNumber = sender.identificacion.replace(/\D/g, '');
         if (!cleanNumber || cleanNumber.length === 0) {
@@ -669,6 +696,34 @@ const sendNoteToHKA = async (invoice, noteDetails, docType) => {
     }
 };
 
+// --- [NUEVO] FUNCIÓN DE DESCARGA DE ARCHIVOS ---
+const downloadFileFromHKA = async (serie, numeroDocumento, tipoArchivo) => {
+    try {
+        const token = await getAuthToken();
+        
+        const payload = {
+            "serie": serie,
+            "numeroDocumento": numeroDocumento,
+            "tipoArchivo": tipoArchivo // Ej: "jml", "pdf", "xml"
+        };
+
+        console.log("📥 Solicitando descarga de archivo a HKA:", JSON.stringify(payload, null, 2));
+
+        const response = await axios.post(API_URL_DESCARGA, payload, {
+            headers: {
+                'Authorization': `Bearer ${token}`,
+                'Content-Type': 'application/json'
+            }
+        });
+
+        console.log('✅ Archivo recuperado con éxito de HKA.');
+        return response.data; // Retorna la data (probablemente contiene el documento en base64 o link)
+
+    } catch (error) {
+        handleHkaError(error);
+    }
+};
+
 // --- MANEJO DE ERRORES ---
 const handleHkaError = (error) => {
     console.error("!!!!!!!!!!!!!!!!!! ERROR EN API HKA !!!!!!!!!!!!!!!!!!");
@@ -696,5 +751,6 @@ export {
     sendInvoiceToHKA,
     sendCreditNoteToHKA,
     sendDebitNoteToHKA,
-    voidInvoiceInHKA
+    voidInvoiceInHKA,
+    downloadFileFromHKA // <--- Exportada
 };
