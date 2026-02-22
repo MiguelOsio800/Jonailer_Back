@@ -8,7 +8,8 @@ import {
     deleteInvoice, 
     sendInvoiceToTheFactory,
     createCreditNote, // <--- Nuevo
-    createDebitNote   // <--- Nuevo
+    createDebitNote,   // <--- Nuevo
+    downloadInvoiceFile // <--- Nuevo
 } from '../controllers/invoice.controller.js';
 import { protect, authorize } from '../middleware/auth.middleware.js';
 
@@ -38,5 +39,8 @@ router.route('/:id/credit-note')
 // Nueva Ruta: Nota de Débito
 router.route('/:id/debit-note')
     .post(authorize('invoices.create'), createDebitNote);
+
+router.route('/:id/download-hka')
+    .post(authorize('invoices.view'), downloadInvoiceFile);
 
 export default router;

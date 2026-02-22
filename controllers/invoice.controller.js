@@ -1,5 +1,5 @@
 import { Invoice, CompanyInfo, Client, Office, sequelize } from '../models/index.js'; // Importar Office
-import { sendInvoiceToHKA, sendCreditNoteToHKA, sendDebitNoteToHKA, voidInvoiceInHKA } from '../services/theFactoryAPI.service.js';
+import { sendInvoiceToHKA, sendCreditNoteToHKA, sendDebitNoteToHKA, voidInvoiceInHKA, downloadFileFromHKA } from '../services/theFactoryAPI.service.js';
 import { Op } from 'sequelize'; // Importamos Op para usar OR
 
 
@@ -285,4 +285,49 @@ export const createDebitNote = async (req, res) => {
     } catch (error) {
         res.status(500).json({ message: error.message });
     }
+};
+
+export const downloadInvoiceFile = async (req, res) => {
+    try {
+        const { id } = req.params;
+        const { tipoArchivo } = req.body; 
+
+        const invoice = await Invoice.findByPk(id, { include: [Office] });
+        
+        if (!invoice) {
+            return res.status(404).json({ message: 'Factura no encontrada para descargar' });
+        }
+
+        if (!invoice.Office?.code) {
+            return res.status(400).json({ message: 'La oficina de esta factura no tiene Serie (Code) asignada.' });
+        }
+
+        const serie = invoice.Office.code;
+        
+        // CORRECCIÓN: Forzamos 8 dígitos para cumplir con el estándar de HKA
+        // Si tu factura es '000051', esto lo convertirá en '00000051'
+        let rawNumber = invoice.invoiceNumber.split('-')[1] || invoice.invoiceNumber;
+        const numeroDocumento = rawNumber.toString().padStart(8, '0');
+        
+        const tipo = tipoArchivo || 'pdf'; 
+
+        // Log para depuración (ver qué estamos enviando exactamente)
+        console.log(`Intentando descargar de HKA -> Serie: ${serie}, Numero: ${numeroDocumento}, Tipo: ${tipo}`);
+
+        const hkaResponse = await downloadFileFromHKA(serie, numeroDocumento, tipo);
+
+        res.json({ 
+            message: 'Archivo recuperado con éxito', 
+            data: hkaResponse 
+        });
+
+    } catch (error) {
+        console.error('Error en controlador de descarga HKA:', error.message);
+        // Devolvemos el error detallado para que sepas qué respondió HKA
+        res.status(500).json({ 
+            message: 'Error al descargar archivo de HKA', 
+            error: error.message,
+            detalle: error.response?.data || 'Sin detalle adicional'
+        });
+    }
 };
