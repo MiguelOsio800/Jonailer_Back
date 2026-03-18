@@ -18,18 +18,37 @@ export const createRemesa = async (req, res) => {
             throw new Error('Una o más facturas no fueron encontradas.');
         }
 
-        // --- CÁLCULOS CORREGIDOS ---
         const totalAmount = invoices.reduce((sum, inv) => sum + (inv.totalAmount || 0), 0);
         const totalPackages = invoices.reduce((sum, inv) => 
             sum + (inv.guide?.merchandise?.reduce((p, m) => p + (m.quantity || 0), 0) || 0), 0);
         const totalWeight = invoices.reduce((sum, inv) =>
             sum + (inv.guide?.merchandise?.reduce((p, m) => p + ((m.weight || 0) * (m.quantity || 0)), 0) || 0), 0);
 
+        // 👇 CÁLCULO CORREGIDO (30% para remesas normales)
+        let cooperativeAmount = 0;
+        
+        invoices.forEach(inv => {
+            const tipo = (inv.shippingType || '').toLowerCase();
+            const montoFactura = inv.totalAmount || 0;
+
+            if (tipo.includes('franquicia') || tipo.includes('expreso') || tipo.includes('mudanza')) {
+                // 15% para la cooperativa
+                cooperativeAmount += montoFactura * 0.15;
+            } else if (tipo.includes('no asociado')) {
+                // 30% para la cooperativa
+                cooperativeAmount += montoFactura * 0.30;
+            } else {
+                // Remesa normal: 30% para la cooperativa (CORREGIDO)
+                cooperativeAmount += montoFactura * 0.30;
+            }
+        });
+
         const newRemesa = await Remesa.create({
             ...req.body,
             id: `rem-${Date.now()}`,
             remesaNumber: `REM-${Date.now().toString().slice(-6)}`,
             totalAmount,
+            cooperativeAmount, // <-- Guardamos la ganancia aquí
             totalPackages,
             totalWeight
         }, { transaction: t });
@@ -46,13 +65,12 @@ export const createRemesa = async (req, res) => {
         res.status(500).json({ message: 'Error al crear la remesa', error: error.message });
     }
 };
-
 export const deleteRemesa = async (req, res) => {
     const { id: remesaId } = req.params;
-    const t = await sequelize.transaction(); // Iniciar transacción
+    const t = await sequelize.transaction(); // Iniciar transacción segura
 
     try {
-        // 1. Busca la remesa y sus facturas asociadas
+        // 1. Busca la remesa
         const remesa = await Remesa.findByPk(remesaId, { transaction: t });
         if (!remesa) {
             await t.rollback();
@@ -61,18 +79,19 @@ export const deleteRemesa = async (req, res) => {
 
         const vehicle = await Vehicle.findByPk(remesa.vehicleId, { transaction: t });
 
-        // 2. Para cada factura, revierte el estado y elimina las asociaciones
-        if (remesa.invoiceIds && remesa.invoiceIds.length > 0) {
-            await Invoice.update(
-                {
-                    shippingStatus: 'Pendiente para Despacho',
-                    remesaId: null,
-                    // No revertimos vehicleId aquí, porque las facturas siguen asignadas a ese vehículo,
-                    // solo que aún no han salido a ruta.
-                },
-                { where: { id: remesa.invoiceIds }, transaction: t }
-            );
-        }
+        // 2. CORRECCIÓN CRÍTICA: Liberar las facturas de forma segura
+        // Buscamos directamente por remesaId en la tabla Invoices
+        await Invoice.update(
+            {
+                shippingStatus: 'Por Procesar', // O 'Pendiente para Despacho' según lo manejes
+                remesaId: null,
+                vehicleId: null // Opcional, pero recomendado: quita la factura del camión para que esté 100% libre
+            },
+            { 
+                where: { remesaId: remesa.id }, 
+                transaction: t 
+            }
+        );
 
         // 3. Cambia el estado del vehículo a 'Disponible'
         if (vehicle) {
@@ -82,21 +101,17 @@ export const deleteRemesa = async (req, res) => {
         // 4. Elimina el registro de la remesa
         await remesa.destroy({ transaction: t });
 
-        // Confirma los cambios si todo fue exitoso
+        // Confirma los cambios en la BD
         await t.commit();
-
-        // Prepara la respuesta final
-        const updatedInvoices = await Invoice.findAll({ where: { id: remesa.invoiceIds } });
         if (vehicle) await vehicle.reload();
 
         res.status(200).json({
-            message: 'Remesa eliminada. Facturas y vehículo revertidos a su estado anterior.',
-            updatedInvoices,
+            message: 'Remesa anulada con éxito. Las facturas han sido liberadas para ser usadas nuevamente.',
             updatedVehicle: vehicle
         });
 
     } catch (error) {
-        await t.rollback(); // Revierte todo si hay un error
+        await t.rollback();
         console.error('Error al eliminar la remesa:', error);
         res.status(500).json({ message: 'Error al eliminar la remesa', error: error.message });
     }

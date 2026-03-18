@@ -151,7 +151,8 @@ export const deleteCertificado = async (req, res) => {
 
 export const getPagos = async (req, res) => {
     try {
-        const pagos = await PagoAsociado.findAll({ order: [['fechaVencimiento', 'DESC']] });
+        // CAMBIO: Ordenar por createdAt en lugar de fechaVencimiento
+        const pagos = await PagoAsociado.findAll({ order: [['createdAt', 'DESC']] });
         res.json(pagos);
     } catch (error) {
         res.status(500).json({ message: 'Error al obtener pagos', error: error.message });
@@ -244,14 +245,12 @@ export const getDeudasByAsociado = async (req, res) => {
                 asociadoId: id,
                 status: 'Pendiente' 
             },
-            order: [['fechaVencimiento', 'ASC']]
+            // CAMBIO: Ordenar por createdAt
+            order: [['createdAt', 'ASC']]
         });
         res.json(deudas);
     } catch (error) {
-        res.status(500).json({ 
-            message: 'Error al obtener deudas del asociado', 
-            error: error.message 
-        });
+        res.status(500).json({ message: 'Error al obtener deudas del asociado', error: error.message });
     }
 };
 

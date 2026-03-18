@@ -99,12 +99,13 @@ export const deleteVehicle = async (req, res) => {
             return res.status(404).json({ message: 'Vehículo no encontrado' });
         }
 
-        // 1. Borrado en cascada manual: Eliminamos los certificados vinculados al vehículo primero
+        // 1. Borrado en cascada: Eliminamos los certificados vinculados al vehículo primero.
+        // NOTA: Asegúrate de que tu modelo use 'vehiculoId'. Si tu modelo en BD usa 'vehicleId' (en inglés), cámbialo aquí.
         await Certificado.destroy({ 
             where: { vehiculoId: id } 
         });
 
-        // 2. Ahora sí, eliminamos el vehículo de forma segura
+        // 2. Ahora sí, eliminamos el vehículo
         await vehicle.destroy();
         
         res.json({ message: 'Vehículo y sus certificados eliminados correctamente' });
@@ -112,13 +113,13 @@ export const deleteVehicle = async (req, res) => {
     } catch (error) {
         console.error('Error al eliminar vehículo:', error);
         
-        // Mantenemos la protección contable: si tiene facturas o remesas (viajes), no dejamos borrarlo.
+        // 3. Protección de base de datos estricta
         if (error.name === 'SequelizeForeignKeyConstraintError') {
             return res.status(400).json({ 
-                message: 'No se puede eliminar: El vehículo ya tiene Facturas o Viajes (Remesas) registrados en el sistema.' 
+                message: 'No se puede eliminar: Este vehículo ya tiene Facturas asignadas o Viajes (Remesas) guardados en el historial.' 
             });
         }
-        res.status(500).json({ message: 'Error interno al eliminar el vehículo' });
+        res.status(500).json({ message: 'Error interno al eliminar el vehículo', error: error.message });
     }
 };
 // --- Lógica de Operaciones de Flota ---
@@ -201,16 +202,36 @@ export const dispatchVehicle = async (req, res) => {
             where: { vehicleId, shippingStatus: 'Pendiente para Despacho' },
             transaction: t
         });
+        
         if (invoicesToDispatch.length === 0) {
             await t.rollback();
             return res.status(404).json({ message: 'No se encontraron facturas pendientes para despachar en este vehículo.' });
         }
+        
         const invoiceIds = invoicesToDispatch.map(inv => inv.id);
         const vehicle = await Vehicle.findByPk(vehicleId, { transaction: t });
+        
         if (!vehicle) {
             await t.rollback();
             return res.status(404).json({ message: 'Vehículo no encontrado.' });
         }
+
+        // 👇 NUEVA LÓGICA DE CÁLCULO
+        let cooperativeAmount = 0;
+        invoicesToDispatch.forEach(inv => {
+            const tipo = (inv.shippingType || '').toLowerCase();
+            const montoFactura = inv.totalAmount || 0;
+
+            if (tipo.includes('franquicia') || tipo.includes('expreso') || tipo.includes('mudanza')) {
+                cooperativeAmount += montoFactura * 0.15;
+            } else if (tipo.includes('no asociado')) {
+                cooperativeAmount += montoFactura * 0.30;
+            } else {
+                cooperativeAmount += montoFactura * 0.70;
+            }
+        });
+
+        // CREACIÓN DE LA REMESA
         const newRemesa = await Remesa.create({
             id: `rem-${Date.now()}`,
             remesaNumber: `REM-${Date.now().toString().slice(-6)}`,
@@ -219,17 +240,22 @@ export const dispatchVehicle = async (req, res) => {
             vehicleId,
             invoiceIds,
             totalAmount: invoicesToDispatch.reduce((sum, inv) => sum + (inv.totalAmount || 0), 0),
+            cooperativeAmount, // <-- Guardamos la ganancia de la cooperativa aquí
             totalPackages: invoicesToDispatch.reduce((sum, inv) => sum + (inv.guide?.merchandise?.reduce((p, m) => p + (m.quantity || 0), 0) || 0), 0),
             totalWeight: invoicesToDispatch.reduce((sum, inv) => sum + (inv.guide?.merchandise?.reduce((p, m) => p + ((m.weight || 0) * (m.quantity || 0)), 0) || 0), 0),
         }, { transaction: t });
+
+        // ... (El resto de tu función dispatchVehicle queda igual: actualiza facturas, vehículo y hace commit)
         await Invoice.update(
             { shippingStatus: 'En Tránsito', remesaId: newRemesa.id },
             { where: { id: invoiceIds }, transaction: t }
         );
         await vehicle.update({ status: 'En Ruta' }, { transaction: t });
         await t.commit();
+        
         const updatedInvoices = await Invoice.findAll({ where: { id: invoiceIds } });
         await vehicle.reload();
+        
         res.status(200).json({
             message: `Vehículo ${vehicle.placa} despachado con la remesa ${newRemesa.remesaNumber}.`,
             newRemesa,

@@ -41,6 +41,11 @@ const Remesa = sequelize.define('Remesa', {
         type: DataTypes.FLOAT,
         allowNull: false,
     },
+    cooperativeAmount: {
+        type: DataTypes.FLOAT,
+        allowNull: false,
+        defaultValue: 0,
+    },
 }, {
     timestamps: true,
 });
