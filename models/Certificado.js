@@ -31,6 +31,11 @@ const Certificado = sequelize.define('Certificado', {
         type: DataTypes.ENUM('Activo', 'Inactivo', 'Suspendido', 'Excluido'),
         defaultValue: 'Activo',
     },
+    codigo: { // <-- NUEVO CAMPO
+        type: DataTypes.STRING,
+        allowNull: false, // Obligatorio
+        unique: { msg: "Este código de certificado ya está registrado." }, // Único
+    },
 });
 
 export default Certificado;

@@ -1,4 +1,4 @@
-import { Vehicle, Invoice, Remesa, sequelize } from '../models/index.js';
+import { Vehicle, Invoice, Remesa, sequelize, Certificado } from '../models/index.js';
 
 // --- CRUD Básico para Vehículos ---
 
@@ -92,15 +92,35 @@ export const updateVehicle = async (req, res) => {
 
 export const deleteVehicle = async (req, res) => {
     try {
-        const vehicle = await Vehicle.findByPk(req.params.id);
-        if (!vehicle) return res.status(404).json({ message: 'Vehículo no encontrado' });
+        const { id } = req.params;
+        const vehicle = await Vehicle.findByPk(id);
+        
+        if (!vehicle) {
+            return res.status(404).json({ message: 'Vehículo no encontrado' });
+        }
+
+        // 1. Borrado en cascada manual: Eliminamos los certificados vinculados al vehículo primero
+        await Certificado.destroy({ 
+            where: { vehiculoId: id } 
+        });
+
+        // 2. Ahora sí, eliminamos el vehículo de forma segura
         await vehicle.destroy();
-        res.json({ message: 'Vehículo eliminado' });
+        
+        res.json({ message: 'Vehículo y sus certificados eliminados correctamente' });
+
     } catch (error) {
-        res.status(500).json({ message: 'Error al eliminar vehículo', error: error.message });
+        console.error('Error al eliminar vehículo:', error);
+        
+        // Mantenemos la protección contable: si tiene facturas o remesas (viajes), no dejamos borrarlo.
+        if (error.name === 'SequelizeForeignKeyConstraintError') {
+            return res.status(400).json({ 
+                message: 'No se puede eliminar: El vehículo ya tiene Facturas o Viajes (Remesas) registrados en el sistema.' 
+            });
+        }
+        res.status(500).json({ message: 'Error interno al eliminar el vehículo' });
     }
 };
-
 // --- Lógica de Operaciones de Flota ---
 
 /**

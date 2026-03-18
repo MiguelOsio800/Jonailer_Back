@@ -4,12 +4,13 @@ import { sequelize } from '../config/db.js';
 const Asociado = sequelize.define('Asociado', {
     id: {
         type: DataTypes.STRING,
+        defaultValue: DataTypes.UUIDV4, // Generación automática segura
         primaryKey: true,
     },
     codigo: {
         type: DataTypes.STRING,
         allowNull: false,
-        unique: true,
+        unique: { msg: "El código de asociado ya existe." },
     },
     nombre: {
         type: DataTypes.STRING,
@@ -18,7 +19,7 @@ const Asociado = sequelize.define('Asociado', {
     cedula: {
         type: DataTypes.STRING,
         allowNull: false,
-        unique: true,
+        unique: { msg: "La cédula ya está registrada." },
     },
     fechaNacimiento: {
         type: DataTypes.DATEONLY,
@@ -31,9 +32,7 @@ const Asociado = sequelize.define('Asociado', {
     },
     correoElectronico: {
         type: DataTypes.STRING,
-        validate: {
-            isEmail: true,
-        },
+        validate: { isEmail: { msg: "Formato de correo inválido." } },
     },
     direccion: {
         type: DataTypes.TEXT,

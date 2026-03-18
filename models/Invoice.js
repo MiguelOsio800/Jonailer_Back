@@ -48,7 +48,7 @@ const Invoice = sequelize.define('Invoice', {
     defaultValue: 'Pendiente',
   },
   shippingStatus: {
-    type: DataTypes.ENUM('Pendiente para Despacho', 'En Tránsito', 'Entregada'),
+    type: DataTypes.ENUM('Pendiente para Despacho', 'En Tránsito', 'Entregada','En Oficina Destino','Reportada Falta'),
     defaultValue: 'Pendiente para Despacho',
   },
   guide: {

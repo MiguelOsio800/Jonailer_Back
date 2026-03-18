@@ -53,26 +53,26 @@ export const authorize = (...requiredPermissions) => {
             return res.status(401).json({ message: 'No autorizado.' });
         }
 
-        // 2. IMPORTANTE: Si el objeto Role no existe en el usuario, es un error de DB
+        // 2. Si el objeto Role no existe, el usuario no tiene rol asignado
         if (!req.user.Role) {
             return res.status(403).json({ 
                 message: 'Acceso prohibido. El usuario no tiene un rol válido asignado en la base de datos.' 
             });
         }
 
-        // 3. BYPASS DE SUPERUSUARIO: 
-        // Buscamos si el ID contiene 'admin' o 'tech' para ser flexibles con tus IDs dinámicos
-        const roleId = req.user.Role.id.toLowerCase();
-        if (roleId.includes('admin') || roleId.includes('tech')) {
-            return next();
-        }
+        // --- SE ELIMINÓ EL BYPASS DE ADMIN/TECH AQUÍ ---
+        // Ahora TODOS (incluso los admin) deben tener el permiso asignado en la BD.
 
-        // 4. Verificación de permisos para usuarios normales
+        // 3. Verificación de permisos (usando tu estructura original de Objetos y nombre 'permissions')
         const userPermissions = req.user.Role.permissions || {};
+        
+        // Verificamos si tiene al menos uno de los permisos requeridos
         const hasPermission = requiredPermissions.some(p => userPermissions[p] === true);
         
         if (!hasPermission) {
-            return res.status(403).json({ message: 'No tienes los permisos necesarios para este módulo.' });
+            return res.status(403).json({ 
+                message: `No tienes los permisos necesarios. Requeridos: ${requiredPermissions.join(', ')}` 
+            });
         }
 
         next();

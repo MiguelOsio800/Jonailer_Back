@@ -22,10 +22,10 @@ export const login = async (req, res) => {
             if (isMatch) {
                 // Generamos ambos tokens
                 const accessToken = jwt.sign({ id: user.id }, process.env.JWT_SECRET, {
-                    expiresIn: '15m',
+                    expiresIn: '4h',
                 });
                 const refreshToken = jwt.sign({ id: user.id }, process.env.JWT_REFRESH_SECRET, {
-                    expiresIn: '1h',
+                    expiresIn: '7d',
                 });
                 
                 const { password: _, ...userWithoutPassword } = user.toJSON();
@@ -47,8 +47,8 @@ export const login = async (req, res) => {
 
 // --- FUNCIÓN DE REFRESH TOKEN ---
 export const refreshToken = async (req, res) => {
-    // Leemos el token desde el cuerpo de la solicitud
-    const { token } = req.body;
+    // CAMBIO: Ahora leemos 'refreshToken' para que coincida con lo que envía el frontend
+    const { refreshToken: token } = req.body; 
 
     if (!token) {
         return res.status(401).json({ message: 'No se proporcionó un refresh token.' });
@@ -62,16 +62,14 @@ export const refreshToken = async (req, res) => {
             return res.status(401).json({ message: 'Usuario no encontrado.' });
         }
 
-        // Generamos un nuevo accessToken
         const newAccessToken = jwt.sign({ id: user.id }, process.env.JWT_SECRET, {
-            expiresIn: '15m',
+            expiresIn: '4h', // Mismo tiempo que el original
         });
 
-        // --- CAMBIO: Enviamos el nuevo token en la respuesta JSON ---
         res.status(200).json({ accessToken: newAccessToken });
-
     } catch (error) {
-        return res.status(403).json({ message: 'Refresh token inválido o expirado. Por favor, inicie sesión de nuevo.' });
+        // Si el token de 7 días expira, recién ahí pedimos login
+        return res.status(403).json({ message: 'Sesión expirada. Por favor, inicie sesión.' });
     }
 };
 

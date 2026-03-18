@@ -9,7 +9,7 @@ dotenv.config();
 const API_URL_AUTH = 'https://demoemisionv2.thefactoryhka.com.ve/api/Autenticacion';
 const API_URL_EMISION = 'https://demoemisionv2.thefactoryhka.com.ve/api/Emision';
 const API_URL_ANULACION = 'https://demoemisionv2.thefactoryhka.com.ve/api/Anular';
-const API_URL_DESCARGA = 'https://demoemisionv2.thefactoryhka.com.ve/api/Descarga'; // <--- [NUEVO] URL DE DESCARGA
+const API_URL_DESCARGA = 'https://demoemisionv2.thefactoryhka.com.ve/api/Descarga'; 
 
 // --- CACHÉ DE TOKEN ---
 let cachedToken = {

@@ -7,7 +7,8 @@ import {
     getRecibos, createRecibo,
     // Nuevas funciones que debemos añadir al controlador
     getDeudasByAsociado,
-    getCertificadosByAsociado
+    getCertificadosByAsociado,
+    generarDeudaMasiva
 } from '../controllers/asociado.controller.js';
 
 const router = express.Router();
@@ -48,5 +49,7 @@ router.route('/pagos/:id')
 router.route('/recibos')
     .get(authorize('asociados.view'), getRecibos)
     .post(authorize('asociados.edit'), createRecibo);
+
+router.post('/deuda-masiva', authorize('asociados.edit'), generarDeudaMasiva);
 
 export default router;

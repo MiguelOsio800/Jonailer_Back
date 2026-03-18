@@ -1,9 +1,10 @@
+// Archivo: models/PagoAsociado.js
 import { DataTypes } from 'sequelize';
 import { sequelize } from '../config/db.js';
 
 const PagoAsociado = sequelize.define('PagoAsociado', {
     id: {
-        type: DataTypes.STRING,
+        type: DataTypes.STRING, // Nota: Asegúrate de que esto siga como lo configuramos (UUID o STRING manual)
         primaryKey: true,
     },
     asociadoId: {
@@ -28,10 +29,13 @@ const PagoAsociado = sequelize.define('PagoAsociado', {
     montoUsd: {
         type: DataTypes.FLOAT,
     },
-    fechaVencimiento: {
-        type: DataTypes.DATEONLY,
+    // 👇 NUEVO CAMPO: Congela la tasa del día en que se generó la deuda
+    tasaCambio: {
+        type: DataTypes.FLOAT,
         allowNull: false,
+        defaultValue: 1, 
     },
+    // ❌ ELIMINADO: fechaVencimiento 
     status: {
         type: DataTypes.ENUM('Pendiente', 'Pagado'),
         defaultValue: 'Pendiente',
