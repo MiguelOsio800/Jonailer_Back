@@ -6,10 +6,10 @@ import { CompanyInfo, Office } from '../models/index.js';
 dotenv.config();
 
 // --- CONFIGURACIÓN DE URLS ---
-const API_URL_AUTH = 'https://demoemisionv2.thefactoryhka.com.ve/api/Autenticacion';
-const API_URL_EMISION = 'https://demoemisionv2.thefactoryhka.com.ve/api/Emision';
-const API_URL_ANULACION = 'https://demoemisionv2.thefactoryhka.com.ve/api/Anular';
-const API_URL_DESCARGA = 'https://demoemisionv2.thefactoryhka.com.ve/api/Descarga'; 
+const API_URL_AUTH = 'https://emision.thefactoryhka.com.ve/api/Autenticacion';
+const API_URL_EMISION = 'https://emision.thefactoryhka.com.ve/api/Emision';
+const API_URL_ANULACION = 'https://emision.thefactoryhka.com.ve/api/Anular';
+const API_URL_DESCARGA = 'https://emision.thefactoryhka.com.ve/api/Descarga'; 
 
 // --- CACHÉ DE TOKEN ---
 let cachedToken = {
