@@ -114,6 +114,10 @@ export const createInvoice = async (req, res) => {
         const subtotalCalculado = fleteIngresado + costoManejoFijo + calculadoIpostel + seguro;
         const totalFinal = subtotalCalculado - descuento;
 
+        const sanitizedEmail = senderClient.email && senderClient.email.trim() !== "" 
+        ? senderClient.email 
+        : null;
+
         // --- Creación de Factura (Actualizada con los nuevos campos) ---
         const newInvoice = await Invoice.create({
             id: `INV-${Date.now()}`,
@@ -121,7 +125,7 @@ export const createInvoice = async (req, res) => {
             controlNumber: newControlNumber,
             clientName: senderClient.name,
             clientIdNumber: senderClient.idNumber,
-            clientEmail: senderClient.email,
+            clientEmail: sanitizedEmail,
             date: invoiceData.date,
 
             // === NUEVOS CAMPOS DEL DESTINATARIO ===

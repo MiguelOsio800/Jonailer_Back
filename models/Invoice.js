@@ -29,12 +29,14 @@ const Invoice = sequelize.define('Invoice', {
   },
   // --- NUEVO: Campo para el email del cliente ---
   clientEmail: { 
-    type: DataTypes.STRING,
-    allowNull: true,
-    validate: {
-      isEmail: true,
+  type: DataTypes.STRING,
+  allowNull: true, // Ya lo tienes como true, pero asegúrate
+  validate: {
+    isEmail: {
+      msg: "El formato del correo electrónico es inválido" // Mensaje personalizado para el frontend
     },
   },
+},
   totalAmount: {
     type: DataTypes.FLOAT,
     allowNull: false,
