@@ -1,3 +1,6 @@
 node_modules
 .env
 venv
+Dockerfile.backend
+Dockerfile.frontend
+docker-compose.yml
