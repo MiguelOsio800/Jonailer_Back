@@ -22,7 +22,7 @@ export const login = async (req, res) => {
             if (isMatch) {
                 // Generamos ambos tokens
                 const accessToken = jwt.sign({ id: user.id }, process.env.JWT_SECRET, {
-                    expiresIn: '4h',
+                    expiresIn: '14h',
                 });
                 const refreshToken = jwt.sign({ id: user.id }, process.env.JWT_REFRESH_SECRET, {
                     expiresIn: '7d',
