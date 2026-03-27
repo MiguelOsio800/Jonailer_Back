@@ -47,13 +47,15 @@ export const updateUser = async (req, res) => {
         if (!user) {
             return res.status(404).json({ message: 'Usuario no encontrado' });
         }
-        if (!req.body.password) {
+        
+        // 💡 BLINDAJE: Si la contraseña no existe O es puro espacio en blanco, la eliminamos de la actualización
+        if (!req.body.password || req.body.password.trim() === '') {
             delete req.body.password;
         }
 
         const dataToUpdate = {
             ...req.body,
-            officeId: req.body.officeId || null, // <--- Coma agregada aquí
+            officeId: req.body.officeId || null, 
             asociadoId: req.body.asociadoId || null
         };
 

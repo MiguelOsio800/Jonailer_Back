@@ -1,4 +1,4 @@
-import { Client } from '../models/index.js';
+import { Client, Office } from '../models/index.js';
 
 // @desc    Obtener todos los clientes
 // @route   GET /api/clients
@@ -31,11 +31,29 @@ export const getClientById = async (req, res) => {
 // @desc    Crear un nuevo cliente
 // @route   POST /api/clients
 export const createClient = async (req, res) => {
-    const { id, idNumber, clientType, name, phone, address, email } = req.body;
+    // 💡 AHORA RECIBIMOS EL officeId DEL FRONTEND
+    const { id, idNumber, clientType, name, phone, address, email, officeId } = req.body; 
+    
     if (!idNumber || !name) {
         return res.status(400).json({ message: 'El RIF/Cédula y el nombre son obligatorios.' });
     }
+    
     try {
+        let finalEmail = (email && email.trim() !== '') ? email : null;
+
+        // MAGIA: Si no hay correo del cliente, pero sabemos su oficina, usamos el de la oficina
+        if (!finalEmail && officeId) {
+            const office = await Office.findByPk(officeId);
+            if (office && office.email) {
+                finalEmail = office.email; // Hereda el correo de sucursal
+            }
+        }
+
+        // Salvavidas final: Si la oficina no tiene correo registrado, usamos el genérico
+        if (!finalEmail) {
+            finalEmail = 'cooperativafacturas1@gmail.com';
+        }
+
         const newClient = await Client.create({
             id: id || `client-${Date.now()}`,
             idNumber,
@@ -43,8 +61,9 @@ export const createClient = async (req, res) => {
             name,
             phone,
             address,
-            email,
+            email: finalEmail,
         });
+        
         res.status(201).json(newClient);
     } catch (error) {
         res.status(500).json({ message: 'Error al crear el cliente', error: error.message });

@@ -35,7 +35,11 @@ const Office = sequelize.define('Office', {
     type: DataTypes.INTEGER,
     defaultValue: 0,
     allowNull: false
-  }
+  },
+  email: { 
+        type: DataTypes.STRING,
+        allowNull: true,
+    }
 }, {
   timestamps: false,
 });
