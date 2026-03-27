@@ -1,4 +1,4 @@
-import { Remesa, Invoice, Vehicle, sequelize } from '../models/index.js';
+import { Remesa, Invoice, Vehicle, Asociado, sequelize } from '../models/index.js';
 
 export const getRemesas = async (req, res) => {
     try {
@@ -10,8 +10,10 @@ export const getRemesas = async (req, res) => {
 };
 
 export const createRemesa = async (req, res) => {
-    const { vehicleId, invoiceIds } = req.body;
+    // ⚠️ Importante: Recibimos asociadoId y exchangeRate del frontend
+    const { vehicleId, invoiceIds, exchangeRate, asociadoId } = req.body; 
     const t = await sequelize.transaction();
+    
     try {
         const invoices = await Invoice.findAll({ where: { id: invoiceIds }, transaction: t });
         if (invoices.length !== invoiceIds.length) {
@@ -24,7 +26,6 @@ export const createRemesa = async (req, res) => {
         const totalWeight = invoices.reduce((sum, inv) =>
             sum + (inv.guide?.merchandise?.reduce((p, m) => p + ((m.weight || 0) * (m.quantity || 0)), 0) || 0), 0);
 
-        // 👇 CÁLCULO CORREGIDO (30% para remesas normales)
         let cooperativeAmount = 0;
         
         invoices.forEach(inv => {
@@ -32,25 +33,59 @@ export const createRemesa = async (req, res) => {
             const montoFactura = inv.totalAmount || 0;
 
             if (tipo.includes('franquicia') || tipo.includes('expreso') || tipo.includes('mudanza')) {
-                // 15% para la cooperativa
                 cooperativeAmount += montoFactura * 0.15;
             } else if (tipo.includes('no asociado')) {
-                // 30% para la cooperativa
                 cooperativeAmount += montoFactura * 0.30;
             } else {
-                // Remesa normal: 30% para la cooperativa (CORREGIDO)
                 cooperativeAmount += montoFactura * 0.30;
             }
         });
 
+        // 1. Buscamos la info del socio
+        if (!asociadoId) {
+             throw new Error('El asociadoId es requerido para generar el número de remesa.');
+        }
+        const asociado = await Asociado.findByPk(asociadoId, { transaction: t });
+        
+        // 2. Extraemos SOLO el primer nombre y lo pasamos a MAYÚSCULAS
+        let firstName = 'SOCIO';
+        if (asociado && asociado.name) {
+            // Si se llama "Juan Perez", split(' ')[0] toma "Juan"
+            firstName = asociado.name.split(' ')[0].toUpperCase(); 
+        }
+
+        // 3. Buscamos la última remesa DE ESTE SOCIO en específico
+        const lastRemesa = await Remesa.findOne({
+            where: { asociadoId: asociadoId },
+            order: [['createdAt', 'DESC']],
+            transaction: t
+        });
+
+        let nextNumber = 1;
+        if (lastRemesa && lastRemesa.remesaNumber) {
+            // El formato será ej: REM-JUAN-5. Separamos por guiones y tomamos el último elemento.
+            const parts = lastRemesa.remesaNumber.split('-');
+            const lastNumberStr = parts[parts.length - 1]; 
+            const lastNumber = parseInt(lastNumberStr, 10);
+            if (!isNaN(lastNumber)) {
+                nextNumber = lastNumber + 1;
+            }
+        }
+        
+        // 4. Armamos el número final: REM-JUAN-1
+        const newRemesaNumber = `REM-${firstName}-${nextNumber}`;
+
         const newRemesa = await Remesa.create({
             ...req.body,
             id: `rem-${Date.now()}`,
-            remesaNumber: `REM-${Date.now().toString().slice(-6)}`,
+            remesaNumber: newRemesaNumber,
+            vehicleId,
+            date: req.body.date || new Date().toISOString().split('T')[0],
             totalAmount,
-            cooperativeAmount, // <-- Guardamos la ganancia aquí
+            cooperativeAmount,
             totalPackages,
-            totalWeight
+            totalWeight,
+            exchangeRate: exchangeRate || 1.00 
         }, { transaction: t });
 
         await Invoice.update(
@@ -65,12 +100,12 @@ export const createRemesa = async (req, res) => {
         res.status(500).json({ message: 'Error al crear la remesa', error: error.message });
     }
 };
+
 export const deleteRemesa = async (req, res) => {
     const { id: remesaId } = req.params;
-    const t = await sequelize.transaction(); // Iniciar transacción segura
+    const t = await sequelize.transaction();
 
     try {
-        // 1. Busca la remesa
         const remesa = await Remesa.findByPk(remesaId, { transaction: t });
         if (!remesa) {
             await t.rollback();
@@ -79,13 +114,12 @@ export const deleteRemesa = async (req, res) => {
 
         const vehicle = await Vehicle.findByPk(remesa.vehicleId, { transaction: t });
 
-        // 2. CORRECCIÓN CRÍTICA: Liberar las facturas de forma segura
-        // Buscamos directamente por remesaId en la tabla Invoices
+        // Liberar facturas devolviéndolas a "Pendiente para Despacho"
         await Invoice.update(
             {
-                shippingStatus: 'Por Procesar', // O 'Pendiente para Despacho' según lo manejes
+                shippingStatus: 'Pendiente para Despacho',
                 remesaId: null,
-                vehicleId: null // Opcional, pero recomendado: quita la factura del camión para que esté 100% libre
+                vehicleId: null 
             },
             { 
                 where: { remesaId: remesa.id }, 
@@ -93,15 +127,12 @@ export const deleteRemesa = async (req, res) => {
             }
         );
 
-        // 3. Cambia el estado del vehículo a 'Disponible'
         if (vehicle) {
             await vehicle.update({ status: 'Disponible' }, { transaction: t });
         }
 
-        // 4. Elimina el registro de la remesa
         await remesa.destroy({ transaction: t });
 
-        // Confirma los cambios en la BD
         await t.commit();
         if (vehicle) await vehicle.reload();
 

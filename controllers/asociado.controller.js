@@ -37,33 +37,76 @@ export const createAsociado = async (req, res) => {
         const { id, codigo, cedula } = req.body;
 
         // 1. Verificamos si ya existe por ID, Código o Cédula antes de intentar crear
+        // (Añadimos || null para evitar errores de Sequelize si algún campo viene vacío)
         const existente = await Asociado.findOne({
             where: {
                 [Op.or]: [
                     { id: id || null },
-                    { codigo: codigo },
-                    { cedula: cedula }
+                    { codigo: codigo || null },
+                    { cedula: cedula || null }
                 ]
             }
         });
 
         if (existente) {
-            // SI EXISTE: Actualizamos en lugar de crear
+            // SI EXISTE: Actualizamos en lugar de crear (Mantiene su ID original)
             await existente.update(req.body);
             return res.status(200).json(existente);
         }
 
-        // SI NO EXISTE: Creamos el nuevo registro
-        const newAsociado = await Asociado.create(req.body);
+        // ==========================================================
+        // SI NO EXISTE: Procedemos a crear con el ID numérico secuencial
+        // ==========================================================
+
+        // 2. Obtenemos todos los IDs actuales para saber por dónde vamos
+        const todosLosSocios = await Asociado.findAll({ attributes: ['id'] });
+        
+        let maxId = 0;
+        let countAntiguos = 0;
+
+        todosLosSocios.forEach(socio => {
+            // Intentamos convertir el ID a número
+            const num = parseInt(socio.id, 10);
+            
+            // Verificamos si el ID es un número puro (ej: "1", "2") y no un código viejo
+            if (!isNaN(num) && String(num) === socio.id) {
+                if (num > maxId) {
+                    maxId = num; // Guardamos el número más alto encontrado
+                }
+            } else {
+                countAntiguos++; // Contamos los socios que tienen formato viejo
+            }
+        });
+
+        // 3. Calculamos el próximo número para el nuevo socio
+        let nextNumber = 1;
+        if (maxId > 0) {
+            nextNumber = maxId + 1; // Le sumamos 1 al ID numérico más alto
+        } else if (countAntiguos > 0) {
+            nextNumber = countAntiguos + 1; // Si no hay IDs numéricos aún, empezamos después de los viejos
+        }
+
+        // 4. Convertimos el número a String ("1", "2", "3") para proteger la BD
+        const newId = String(nextNumber);
+
+        // 5. Creamos el socio sobrescribiendo cualquier ID que intente enviar el frontend por error
+        const newAsociado = await Asociado.create({
+            ...req.body,
+            id: newId
+        });
+
         res.status(201).json(newAsociado);
 
     } catch (error) {
         console.error("Error en createAsociado:", error);
+        
+        // Manejo de errores de restricción única (ej. dos usuarios dándole al botón al mismo tiempo)
         if (error.name === 'SequelizeUniqueConstraintError') {
             return res.status(400).json({ 
                 message: 'Ya existe un asociado con ese código o cédula.' 
             });
         }
+        
         res.status(500).json({ message: 'Error al procesar el socio', error: error.message });
     }
 };

@@ -46,6 +46,11 @@ const Remesa = sequelize.define('Remesa', {
         allowNull: false,
         defaultValue: 0,
     },
+    exchangeRate: { // NUEVO: Tasa de cambio guardada al momento de crear la remesa
+        type: DataTypes.FLOAT,
+        allowNull: false,
+        defaultValue: 1.00,
+    },
 }, {
     timestamps: true,
 });
