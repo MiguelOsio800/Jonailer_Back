@@ -96,6 +96,13 @@ User.hasMany(AsientoManual, { foreignKey: 'userId' });
 Asociado.hasMany(Certificado, { foreignKey: 'asociadoId' });
 Certificado.belongsTo(Asociado, { foreignKey: 'asociadoId' });
 
+Dispatch.belongsTo(Vehicle, { foreignKey: 'vehicleId' });
+Vehicle.hasMany(Dispatch, { foreignKey: 'vehicleId' });
+
+// Dispatch <-> Office (Origen y Destino)
+Dispatch.belongsTo(Office, { as: 'OriginOffice', foreignKey: 'originOfficeId' });
+Dispatch.belongsTo(Office, { as: 'DestinationOffice', foreignKey: 'destinationOfficeId' });
+
 // --- Sincronización de la Base de Datos ---
 const syncDatabase = async () => {
     try {
