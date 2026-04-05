@@ -50,7 +50,6 @@ export const createRemesa = async (req, res) => {
         // 2. Extraemos SOLO el primer nombre y lo pasamos a MAYÚSCULAS
         let firstName = 'SOCIO';
         if (asociado && asociado.name) {
-            // Si se llama "Juan Perez", split(' ')[0] toma "Juan"
             firstName = asociado.name.split(' ')[0].toUpperCase(); 
         }
 
@@ -63,7 +62,6 @@ export const createRemesa = async (req, res) => {
 
         let nextNumber = 1;
         if (lastRemesa && lastRemesa.remesaNumber) {
-            // El formato será ej: REM-JUAN-5. Separamos por guiones y tomamos el último elemento.
             const parts = lastRemesa.remesaNumber.split('-');
             const lastNumberStr = parts[parts.length - 1]; 
             const lastNumber = parseInt(lastNumberStr, 10);
@@ -88,8 +86,17 @@ export const createRemesa = async (req, res) => {
             exchangeRate: exchangeRate || 1.00 
         }, { transaction: t });
 
+        // ==========================================
+        // LA SOLUCIÓN ESTÁ AQUÍ 👇
+        // ==========================================
+        // Actualizamos no solo el remesaId, sino el estado del envío 
+        // y le asignamos el vehículo que transportará la factura.
         await Invoice.update(
-            { remesaId: newRemesa.id },
+            { 
+                remesaId: newRemesa.id,
+                shippingStatus: 'En Tránsito', // Evita que vuelva a salir como disponible
+                vehicleId: vehicleId          // Asocia el vehículo a la factura directamente
+            },
             { where: { id: invoiceIds }, transaction: t }
         );
 
