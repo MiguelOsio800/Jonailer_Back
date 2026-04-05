@@ -24,7 +24,7 @@ import Remesa from './Remesa.js';
 import CuentaContable from './cuentaContable.js';
 import Product from './Product.js';
 import InventoryItem from './InventoryItem.js'; 
-
+import Dispatch from './Dispatch.js';
 import AsientoManual from './AsientoManual.js';
 import AsientoManualEntry from './AsientoManualEntry.js';
 // --- Definición de Relaciones ---
@@ -111,5 +111,5 @@ export {
     Role, Office, User, Client, Vehicle, Invoice, Category, ShippingType,
     PaymentMethod, Supplier, ExpenseCategory, Expense, AssetCategory, Asset,
     AuditLog, CompanyInfo, Asociado, Certificado, PagoAsociado, ReciboPagoAsociado, Remesa, CuentaContable, AsientoManual, AsientoManualEntry,
-    Product,InventoryItem
+    Product,InventoryItem, Dispatch
 };
