@@ -106,9 +106,11 @@ Dispatch.belongsTo(Office, { as: 'DestinationOffice', foreignKey: 'destinationOf
 // --- Sincronización de la Base de Datos ---
 const syncDatabase = async () => {
     try {
-        await sequelize.sync({ alter : true }); // Usamos 'force' temporalmente
+        // Esto imprimirá en consola cada comando SQL que intente ejecutar
+        await sequelize.sync({ alter: true, logging: console.log }); 
+        console.log("Sincronización exitosa");
     } catch (error) {
-        console.error('--- ERROR DURANTE LA SINCRONIZACIÓN ---:', error);
+        console.error('--- ERROR DETALLADO ---:', error); // Esto te dirá si MySQL rechazó el ARRAY
     }
 };
 
