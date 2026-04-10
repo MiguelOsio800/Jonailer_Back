@@ -105,7 +105,7 @@ export const createInvoice = async (req, res) => {
 
         // Si el peso es menor o igual a 30.9 Kg, se cobra el 1% del flete
         if (pesoKg <= 30.9) {
-            calculadoIpostel = fleteIngresado * 0.01;
+            calculadoIpostel = fleteIngresado * 0.06;
         }
 
         // C. Cálculo del Total Final por Seguridad en Backend
