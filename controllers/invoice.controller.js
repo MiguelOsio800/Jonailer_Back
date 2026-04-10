@@ -171,20 +171,26 @@ export const updateInvoice = async (req, res) => {
         const invoice = await Invoice.findByPk(req.params.id);
         if (!invoice) return res.status(404).json({ message: 'Factura no encontrada' });
         
-        // --- LOGICA DE CONGELADO: Respetamos la tasa original guardada ---
-        // Prioridad: 1. La tasa enviada en el body (si se quiere cambiar manual)
-        //            2. La tasa que ya tiene la factura grabada
         const rateToUse = req.body.exchangeRate || invoice.exchangeRate;
 
-        // Actualiza el registro con los nuevos campos de costos, etc.
-        // Forzamos el uso de rateToUse para evitar que se pierda o resetee
+        // Extraemos los montos del req.body para que NO se actualicen accidentalmente
+        // al cambiar estados o datos del cliente.
+        const { 
+            exchangeRate,
+            totalAmount, 
+            montoFlete, 
+            Montomanejo, 
+            ipostelFee, 
+            insuranceAmount, 
+            ...safeUpdateData 
+        } = req.body;
+
         await invoice.update({
-            ...req.body,
+            ...safeUpdateData, // Solo actualiza datos seguros (status, cliente, etc.)
             exchangeRate: rateToUse
+            // Omitimos totalAmount para congelar el valor original
         });
         
-        // CRÍTICO: Recarga la instancia para asegurar que todos los datos recién guardados sean devueltos al frontend
-        // Esto le da al frontend la instancia más fresca para su siguiente llamada a 'sendInvoiceToTheFactory'
         const freshInvoice = await Invoice.findByPk(req.params.id, { include: [Office] });
         
         res.json(freshInvoice);
