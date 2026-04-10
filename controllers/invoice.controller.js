@@ -151,7 +151,7 @@ export const createInvoice = async (req, res) => {
                 receiver: { ...receiver, id: receiverClient.id } 
             },
             status: 'Activa',
-            paymentStatus: 'Pendiente',
+            paymentStatus: guide.paymentType === 'flete-pagado' ? 'Pagada' : 'Pendiente',
             shippingStatus: 'Pendiente para Despacho',
             createdByName: invoiceData.createdByName || 'Sistema'
         }, { transaction: t });
