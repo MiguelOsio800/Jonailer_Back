@@ -4,3 +4,4 @@ venv
 Dockerfile.backend
 Dockerfile.frontend
 docker-compose.yml
+venv/
