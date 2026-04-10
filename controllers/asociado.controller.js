@@ -6,25 +6,39 @@ import { Asociado, Certificado, PagoAsociado, ReciboPagoAsociado, Vehicle, seque
 // @desc    Obtener asociados (filtrado si es el propio asociado)
 export const getAsociados = async (req, res) => {
     try {
-        const { page = 1, limit = 10 } = req.query;
-        const offset = (page - 1) * limit;
+        const { page = 1, limit = 10, search = '' } = req.query;
         const whereClause = {};
 
         if (req.user && req.user.asociadoId) {
             whereClause.id = req.user.asociadoId;
         }
 
-        const { count, rows } = await Asociado.findAndCountAll({
+        // --- NUEVO: Búsqueda por Nombre o Código ---
+        if (search) {
+            whereClause[Op.or] = [
+                { nombre: { [Op.iLike]: `%${search}%` } }, // Cambia a Op.like si usas MySQL
+                { codigo: { [Op.iLike]: `%${search}%` } }
+            ];
+        }
+
+        const queryOptions = {
             where: whereClause,
-            order: [['nombre', 'ASC']],
-            limit: parseInt(limit),
-            offset: parseInt(offset)
-        });
+            // --- CAMBIO: Ordenar por código en vez de nombre ---
+            order: [['codigo', 'ASC']],
+        };
+
+        // --- CAMBIO: Si limit es 'all', traemos todos (para arreglar el slider del frontend) ---
+        if (limit !== 'all') {
+            queryOptions.limit = parseInt(limit);
+            queryOptions.offset = (parseInt(page) - 1) * parseInt(limit);
+        }
+
+        const { count, rows } = await Asociado.findAndCountAll(queryOptions);
 
         res.json({
             total: count,
-            totalPages: Math.ceil(count / limit),
-            currentPage: parseInt(page),
+            totalPages: limit === 'all' ? 1 : Math.ceil(count / parseInt(limit)),
+            currentPage: limit === 'all' ? 1 : parseInt(page),
             data: rows
         });
     } catch (error) {

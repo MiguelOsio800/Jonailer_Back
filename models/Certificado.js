@@ -33,8 +33,7 @@ const Certificado = sequelize.define('Certificado', {
     },
     codigo: { // <-- NUEVO CAMPO
         type: DataTypes.STRING,
-        allowNull: false, // Obligatorio
-        unique: { msg: "Este código de certificado ya está registrado." }, // Único
+        allowNull: false, // Obligatorio // Único
     },
 });
 
