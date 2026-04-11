@@ -103,8 +103,17 @@ export const createRemesa = async (req, res) => {
         await t.commit();
         res.status(201).json(newRemesa);
     } catch (error) {
-        await t.rollback();
-        res.status(500).json({ message: 'Error al crear la remesa', error: error.message });
+        if (t) await t.rollback();
+        
+        let errorMessage = error.message;
+        
+        // Esto desentierra el campo exacto que está fallando la validación
+        if (error.name === 'SequelizeValidationError') {
+            errorMessage = error.errors.map(err => err.message).join(' | ');
+        }
+        
+        console.error('[ERROR CREANDO REMESA]:', errorMessage);
+        res.status(500).json({ message: 'Error al crear la remesa', error: errorMessage });
     }
 };
 
