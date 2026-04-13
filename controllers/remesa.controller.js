@@ -1,4 +1,4 @@
-import { Remesa, Invoice, Vehicle, Asociado, sequelize } from '../models/index.js';
+import { Remesa, Invoice, Vehicle, Asociado, sequelize, Office } from '../models/index.js';
 
 export const getRemesas = async (req, res) => {
     try {
@@ -10,50 +10,80 @@ export const getRemesas = async (req, res) => {
 };
 
 export const createRemesa = async (req, res) => {
-    // ⚠️ Importante: Recibimos asociadoId y exchangeRate del frontend
     const { vehicleId, invoiceIds, exchangeRate, asociadoId } = req.body; 
     const t = await sequelize.transaction();
     
     try {
-        const invoices = await Invoice.findAll({ where: { id: invoiceIds }, transaction: t });
-        if (invoices.length !== invoiceIds.length) {
-            throw new Error('Una o más facturas no fueron encontradas.');
+        // 0. Validaciones preventivas de seguridad
+        if (!invoiceIds || !Array.isArray(invoiceIds) || invoiceIds.length === 0) {
+            throw new Error('El arreglo de invoiceIds es requerido y no puede estar vacío.');
+        }
+        if (!asociadoId || !vehicleId) {
+            throw new Error('El asociadoId y vehicleId son campos requeridos.');
         }
 
-        const totalAmount = invoices.reduce((sum, inv) => sum + (inv.totalAmount || 0), 0);
-        const totalPackages = invoices.reduce((sum, inv) => 
-            sum + (inv.guide?.merchandise?.reduce((p, m) => p + (m.quantity || 0), 0) || 0), 0);
-        const totalWeight = invoices.reduce((sum, inv) =>
-            sum + (inv.guide?.merchandise?.reduce((p, m) => p + ((m.weight || 0) * (m.quantity || 0)), 0) || 0), 0);
-
-        let cooperativeAmount = 0;
-        
-        invoices.forEach(inv => {
-            const tipo = (inv.shippingType || '').toLowerCase();
-            const montoFactura = inv.totalAmount || 0;
-
-            if (tipo.includes('franquicia') || tipo.includes('expreso') || tipo.includes('mudanza')) {
-                cooperativeAmount += montoFactura * 0.15;
-            } else if (tipo.includes('no asociado')) {
-                cooperativeAmount += montoFactura * 0.30;
-            } else {
-                cooperativeAmount += montoFactura * 0.30;
-            }
+        // 1. CARGAMOS LAS FACTURAS
+        const invoices = await Invoice.findAll({ 
+            where: { id: invoiceIds },
+            transaction: t 
         });
 
-        // 1. Buscamos la info del socio
-        if (!asociadoId) {
-             throw new Error('El asociadoId es requerido para generar el número de remesa.');
-        }
-        const asociado = await Asociado.findByPk(asociadoId, { transaction: t });
-        
-        // 2. Extraemos SOLO el primer nombre y lo pasamos a MAYÚSCULAS
-        let firstName = 'SOCIO';
-        if (asociado && asociado.name) {
-            firstName = asociado.name.split(' ')[0].toUpperCase(); 
+        if (invoices.length !== invoiceIds.length) {
+            throw new Error('Una o más facturas no fueron encontradas en la base de datos.');
         }
 
-        // 3. Buscamos la última remesa DE ESTE SOCIO en específico
+        // 2. CÁLCULOS SEGUROS
+        const totalAmount = invoices.reduce((sum, inv) => sum + (Number(inv.totalAmount) || 0), 0);
+        
+        let totalPackages = 0;
+        let totalWeight = 0;
+
+        invoices.forEach(inv => {
+            const merchandise = inv.guide?.merchandise || [];
+            merchandise.forEach(m => {
+                totalPackages += (Number(m.quantity) || 0);
+                totalWeight += (Number(m.weight) || 0) * (Number(m.quantity) || 0);
+            });
+        });
+
+        // 3. CÁLCULO DE COMISIÓN
+        let cooperativeAmount = 0;
+        invoices.forEach(inv => {
+            const tipo = (inv.shippingType || '').toLowerCase();
+            const montoFactura = Number(inv.totalAmount) || 0;
+            const porcentaje = (tipo.includes('franquicia') || tipo.includes('expreso') || tipo.includes('mudanza')) ? 0.15 : 0.30;
+            cooperativeAmount += montoFactura * porcentaje;
+        });
+
+        // ==========================================
+        // 4. BUSCAR INFO DEL SOCIO, OFICINA Y ÚLTIMA REMESA
+        // ==========================================
+        const asociado = await Asociado.findByPk(asociadoId, { transaction: t });
+        if (!asociado) throw new Error(`El asociado con ID ${asociadoId} no fue encontrado.`);
+
+        // --- LÓGICA DE LA OFICINA (AHORA LIGADA AL USUARIO) ---
+        // Tomamos el officeId directamente del usuario que está haciendo la solicitud
+        const userOfficeId = req.user.officeId; 
+        
+        const oficina = await Office.findByPk(userOfficeId, { transaction: t });
+        
+        let letraOficina = 'OFC'; // Respaldo
+        
+        if (oficina) {
+            // Lee el campo 'code' de la oficina a la que pertenece el usuario
+            if (oficina.code && oficina.code.trim() !== '') {
+                letraOficina = oficina.code.trim().toUpperCase();
+            } 
+            else if (oficina.name && oficina.name.trim() !== '') {
+                letraOficina = oficina.name.trim().charAt(0).toUpperCase();
+            }
+        }
+        // ----------------------------------------------------
+
+        // Tomamos la cédula si existe en tu modelo, si no, usamos el ID del asociado
+        const identificador = asociado.cedula || asociado.identificacion || asociadoId;
+
+        // Buscamos la última remesa DE ESTA PERSONA EXACTA
         const lastRemesa = await Remesa.findOne({
             where: { asociadoId: asociadoId },
             order: [['createdAt', 'DESC']],
@@ -61,59 +91,60 @@ export const createRemesa = async (req, res) => {
         });
 
         let nextNumber = 1;
-        if (lastRemesa && lastRemesa.remesaNumber) {
+        if (lastRemesa?.remesaNumber) {
+            // Dividimos por el guion para encontrar el último número
             const parts = lastRemesa.remesaNumber.split('-');
-            const lastNumberStr = parts[parts.length - 1]; 
-            const lastNumber = parseInt(lastNumberStr, 10);
-            if (!isNaN(lastNumber)) {
-                nextNumber = lastNumber + 1;
-            }
+            const lastNum = parseInt(parts[parts.length - 1], 10);
+            if (!isNaN(lastNum)) nextNumber = lastNum + 1;
         }
         
-        // 4. Armamos el número final: REM-JUAN-1
-        const newRemesaNumber = `REM-${firstName}-${nextNumber}`;
+        // Armamos el número final. Ej: B-REM-V30268581-1
+        const newRemesaNumber = `${letraOficina}-REM-${identificador}-${nextNumber}`;
 
+        // ==========================================
+        // 5. CREACIÓN DE LA REMESA
+        // ==========================================
         const newRemesa = await Remesa.create({
-            ...req.body,
             id: `rem-${Date.now()}`,
             remesaNumber: newRemesaNumber,
-            vehicleId,
+            asociadoId: asociadoId,
+            vehicleId: vehicleId,
+            invoiceIds: invoiceIds, 
             date: req.body.date || new Date().toISOString().split('T')[0],
-            totalAmount,
-            cooperativeAmount,
-            totalPackages,
-            totalWeight,
-            exchangeRate: exchangeRate || 1.00 
+            totalAmount: totalAmount,
+            cooperativeAmount: cooperativeAmount,
+            totalPackages: totalPackages,
+            totalWeight: totalWeight,
+            exchangeRate: Number(exchangeRate) || 1.00 
         }, { transaction: t });
 
-        // ==========================================
-        // LA SOLUCIÓN ESTÁ AQUÍ 👇
-        // ==========================================
-        // Actualizamos no solo el remesaId, sino el estado del envío 
-        // y le asignamos el vehículo que transportará la factura.
+        // 6. ACTUALIZACIÓN DE FACTURAS
         await Invoice.update(
             { 
                 remesaId: newRemesa.id,
-                shippingStatus: 'En Tránsito', // Evita que vuelva a salir como disponible
-                vehicleId: vehicleId          // Asocia el vehículo a la factura directamente
+                shippingStatus: 'En Tránsito',
+                vehicleId: vehicleId 
             },
             { where: { id: invoiceIds }, transaction: t }
         );
 
         await t.commit();
         res.status(201).json(newRemesa);
+
     } catch (error) {
         if (t) await t.rollback();
         
-        let errorMessage = error.message;
-        
-        // Esto desentierra el campo exacto que está fallando la validación
-        if (error.name === 'SequelizeValidationError') {
-            errorMessage = error.errors.map(err => err.message).join(' | ');
-        }
-        
-        console.error('[ERROR CREANDO REMESA]:', errorMessage);
-        res.status(500).json({ message: 'Error al crear la remesa', error: errorMessage });
+        console.error("===== ERROR DETALLADO =====");
+        console.error("NOMBRE:", error.name); 
+        console.error("MENSAJE:", error.message);
+        if (error.parent) console.error("DB DETAIL:", error.parent.detail); 
+        console.error("===========================");
+
+        res.status(500).json({ 
+            message: 'Error al crear la remesa', 
+            error: error.message,
+            stack: error.name === 'SequelizeValidationError' ? error.errors.map(e => e.message) : error.stack
+        });
     }
 };
 
