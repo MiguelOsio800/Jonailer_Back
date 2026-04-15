@@ -46,6 +46,11 @@ const Remesa = sequelize.define('Remesa', {
         allowNull: false,
         defaultValue: 0,
     },
+    officeId: {
+        type: DataTypes.STRING,
+        allowNull: true, // Ponlo en true inicialmente si ya hay datos, luego puedes cambiarlo a false tras limpiar la data
+        references: { model: 'Offices', key: 'id' } // Asegúrate de que el nombre de la tabla sea correcto ('Offices')
+    },
     exchangeRate: { // NUEVO: Tasa de cambio guardada al momento de crear la remesa
         type: DataTypes.FLOAT,
         allowNull: false,

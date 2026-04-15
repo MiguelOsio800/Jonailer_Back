@@ -2,7 +2,11 @@ import { Remesa, Invoice, Vehicle, Asociado, sequelize, Office } from '../models
 
 export const getRemesas = async (req, res) => {
     try {
-        const remesas = await Remesa.findAll({ order: [['date', 'DESC']] });
+        const userOfficeId = req.user.officeId; // Se obtiene la oficina del usuario logueado
+        const remesas = await Remesa.findAll({ 
+            where: { officeId: userOfficeId }, // Se aplica el filtro por oficina
+            order: [['date', 'DESC']] 
+        });
         res.json(remesas);
     } catch (error) {
         res.status(500).json({ message: 'Error al obtener remesas', error: error.message });
@@ -115,7 +119,8 @@ export const createRemesa = async (req, res) => {
             cooperativeAmount: cooperativeAmount,
             totalPackages: totalPackages,
             totalWeight: totalWeight,
-            exchangeRate: Number(exchangeRate) || 1.00 
+            exchangeRate: Number(exchangeRate) || 1.00,
+            officeId: userOfficeId // Se guarda la oficina del creador en la BD
         }, { transaction: t });
 
         // 6. ACTUALIZACIÓN DE FACTURAS
@@ -150,18 +155,22 @@ export const createRemesa = async (req, res) => {
 
 export const deleteRemesa = async (req, res) => {
     const { id: remesaId } = req.params;
+    const userOfficeId = req.user.officeId;
     const t = await sequelize.transaction();
 
     try {
-        const remesa = await Remesa.findByPk(remesaId, { transaction: t });
+        const remesa = await Remesa.findOne({ 
+            where: { id: remesaId, officeId: userOfficeId }, 
+            transaction: t 
+        });
+
         if (!remesa) {
             await t.rollback();
-            return res.status(404).json({ message: 'Remesa no encontrada' });
+            return res.status(404).json({ message: 'Remesa no encontrada o no pertenece a su oficina' });
         }
 
         const vehicle = await Vehicle.findByPk(remesa.vehicleId, { transaction: t });
 
-        // Liberar facturas devolviéndolas a "Pendiente para Despacho"
         await Invoice.update(
             {
                 shippingStatus: 'Pendiente para Despacho',
