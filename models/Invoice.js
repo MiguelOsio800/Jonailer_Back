@@ -83,6 +83,15 @@ const Invoice = sequelize.define('Invoice', {
     defaultValue: 0.00,
     allowNull: false,
   },
+
+  officeId: {
+  type: DataTypes.STRING,
+  allowNull: true, // Permitir nulos temporalmente para la migración de datos
+  references: {
+    model: 'Offices',
+    key: 'id'
+  }
+},
   
   // =======================================================
   // CAMPOS DE COSTOS Y MONEDA ADICIONALES (AJUSTADOS)

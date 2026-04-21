@@ -106,6 +106,9 @@ Dispatch.belongsTo(Office, { as: 'DestinationOffice', foreignKey: 'destinationOf
 Remesa.belongsTo(Office, { foreignKey: 'officeId' });
 Office.hasMany(Remesa, { foreignKey: 'officeId' });
 
+Office.hasMany(Invoice, { foreignKey: 'officeId' });
+Invoice.belongsTo(Office, { foreignKey: 'officeId' });
+
 // --- Sincronización de la Base de Datos ---
 const syncDatabase = async () => {
     try {
