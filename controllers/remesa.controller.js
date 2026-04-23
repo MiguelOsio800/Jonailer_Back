@@ -50,14 +50,57 @@ export const createRemesa = async (req, res) => {
             });
         });
 
-        // 3. CÁLCULO DE COMISIÓN
-        let cooperativeAmount = 0;
+        // ==========================================
+        // 3. NUEVO CÁLCULO DE COMISIÓN Y SALDOS
+        // ==========================================
+        let totalPagado = 0;
+        let totalDestino = 0;
+        
+        let sumFavorCoopBase = 0;
+        let sumSeguro = 0;
+        let sumIpostel = 0;
+        let sumManejo = 0;
+        let sumIva = 0; // <-- NOTA: Si el IVA está en otro campo, debes sumarlo aquí.
+
         invoices.forEach(inv => {
-            const tipo = (inv.shippingType || '').toLowerCase();
             const montoFactura = Number(inv.totalAmount) || 0;
+            sumSeguro += Number(inv.insuranceAmount) || 0;
+            sumIpostel += Number(inv.ipostelFee) || 0;
+            sumManejo += Number(inv.Montomanejo) || 0;
+
+            // Calcular favor coop base (Ej: 15% o 30% del flete)
+            const tipo = (inv.shippingType || '').toLowerCase();
             const porcentaje = (tipo.includes('franquicia') || tipo.includes('expreso') || tipo.includes('mudanza')) ? 0.15 : 0.30;
-            cooperativeAmount += montoFactura * porcentaje;
+            sumFavorCoopBase += montoFactura * porcentaje;
+
+            // Separar montos por estado de pago (Pagada = Flete Pagado, Pendiente = Cobro en Destino)
+            if (inv.paymentStatus === 'Pagada') {
+                totalPagado += montoFactura;
+            } else {
+                totalDestino += montoFactura;
+            }
         });
+
+        // La base de cobro de la cooperativa
+        const cargosExtras = sumFavorCoopBase + sumSeguro + sumIpostel + sumManejo + sumIva;
+        let cooperativeAmount = 0;
+
+        // Lógica de Escenarios
+        if (totalDestino === 0 && totalPagado > 0) {
+            // Escenario 3: Solo Pagado. El socio se queda con el 70% del monto.
+            const favorSocio = totalPagado * 0.70;
+            cooperativeAmount = totalPagado - favorSocio; // El resto va a la cooperativa
+        } 
+        else if (totalPagado === 0 && totalDestino > 0) {
+            // Escenario 4: Solo Destino. Favor cooperativa = sumatorias
+            cooperativeAmount = cargosExtras;
+        } 
+        else {
+            // Escenarios 1 y 2 (Mixtos: Destino superior a pagado o viceversa)
+            // Según tus reglas: favor coop + seguro + ipostel + manejo + iva - favor soc del campo pagado
+            const favorSocioPagado = totalPagado * 0.70; // Asumiendo que el "favor soc" del pagado es el 70%
+            cooperativeAmount = cargosExtras - favorSocioPagado;
+        }
 
         // ==========================================
         // 4. BUSCAR INFO DEL SOCIO, OFICINA Y ÚLTIMA REMESA

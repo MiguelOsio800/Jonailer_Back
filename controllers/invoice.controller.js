@@ -1,4 +1,4 @@
-import { Invoice, CompanyInfo, Client, Office, sequelize } from '../models/index.js'; // Importar Office
+import { Invoice, CompanyInfo, Client, Office, sequelize, Remesa } from '../models/index.js'; // Importar Office
 import { sendInvoiceToHKA, sendCreditNoteToHKA, sendDebitNoteToHKA, voidInvoiceInHKA, downloadFileFromHKA } from '../services/theFactoryAPI.service.js';
 import { Op } from 'sequelize'; // Importamos Op para usar OR
 
@@ -36,10 +36,13 @@ export const getInvoices = async (req, res) => {
         }
 
         const invoices = await Invoice.findAll({ 
-            where: whereClause, 
-            order: [['invoiceNumber', 'DESC']],
-            include: [{ model: Office, attributes: ['name', 'code'] }]
-        });
+            where: whereClause, 
+            order: [['invoiceNumber', 'DESC']],
+            include: [
+                { model: Office, attributes: ['name', 'code'] },
+                { model: Remesa, attributes: ['remesaNumber', 'date'] } // <-- NUEVO: Incluye los datos de la remesa
+            ]
+        });
         res.json(invoices);
     } catch (error) {
         res.status(500).json({ message: 'Error al obtener las facturas', error: error.message });
