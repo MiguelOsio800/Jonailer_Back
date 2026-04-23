@@ -4,38 +4,45 @@ import { Op } from 'sequelize'; // Importamos Op para usar OR
 
 
 export const getInvoices = async (req, res) => {
-    try {
-        const { user } = req;
-        const whereClause = {};
+    try {
+        const { user } = req;
+        const whereClause = {};
 
-        // === FILTRO UNIVERSAL DE VISIBILIDAD DE FACTURAS (CORRECCIÓN FINAL) ===
-        if (user && user.roleId !== 'role-admin' && user.officeId) {
-            const userOfficeId = user.officeId;
+        // 1. Definimos los roles con acceso a todas las oficinas
+        const globalRoles = ['role-admin', 'role-tecnologia', 'role-soporte']; 
 
-            // Se usa Op.or para que el usuario vea:
-            // 1. Facturas creadas en su oficina (officeId)
-            // 2. O Facturas destinadas a su oficina.
-            whereClause[Op.or] = [
-                // Condición 1: Facturas creadas en su oficina (Historial de Ventas Propio)
-                { officeId: userOfficeId },
-                
-                // Condición 2: Facturas destinadas a su oficina (Carga Entrante o Historial de Recepción)
-                // ELIMINAMOS EL FILTRO DE SHIPPING STATUS para asegurarnos de que la factura se cargue siempre que
-                // esté asociada a una oficina de destino, sin importar su estado final.
-                {
-                    // Busca dentro del campo JSONB 'guide' la oficina de destino
-                    guide: {
-                        destinationOfficeId: userOfficeId
-                    }
-                }
-            ];
-            
-        } else if (user && user.roleId !== 'role-admin' && !user.officeId) {
-             // Si el usuario no es admin pero no tiene officeId, no ve ninguna factura.
-            whereClause.id = null;
-        }
+        // === FILTRO UNIVERSAL DE VISIBILIDAD DE FACTURAS (ACTUALIZADO CON ROLES GLOBALES) ===
+        // 2. Si el usuario existe y NO tiene un rol global, aplicamos el filtro estricto de oficina
+        if (user && !globalRoles.includes(user.roleId)) {
+            if (user.officeId) {
+                const userOfficeId = user.officeId;
 
-        const invoices = await Invoice.findAll({ 
+                // Se usa Op.or para que el usuario vea:
+                // 1. Facturas creadas en su oficina (officeId)
+                // 2. O Facturas destinadas a su oficina.
+                whereClause[Op.or] = [
+                    // Condición 1: Facturas creadas en su oficina (Historial de Ventas Propio)
+                    { officeId: userOfficeId },
+                    
+                    // Condición 2: Facturas destinadas a su oficina (Carga Entrante o Historial de Recepción)
+                    // ELIMINAMOS EL FILTRO DE SHIPPING STATUS para asegurarnos de que la factura se cargue siempre que
+                    // esté asociada a una oficina de destino, sin importar su estado final.
+                    {
+                        // Busca dentro del campo JSONB 'guide' la oficina de destino
+                        guide: {
+                            destinationOfficeId: userOfficeId
+                        }
+                    }
+                ];
+                
+            } else {
+                 // Si el usuario no tiene un rol global y tampoco tiene officeId asignada, no ve ninguna factura.
+                whereClause.id = null;
+            }
+        }
+        // Nota: Si el usuario SÍ tiene un rol global, el bloque if se salta y el whereClause se queda vacío {}, trayendo TODAS las facturas.
+
+        const invoices = await Invoice.findAll({ 
             where: whereClause, 
             order: [['invoiceNumber', 'DESC']],
             include: [
@@ -43,10 +50,11 @@ export const getInvoices = async (req, res) => {
                 { model: Remesa, attributes: ['remesaNumber', 'date'] } // <-- NUEVO: Incluye los datos de la remesa
             ]
         });
-        res.json(invoices);
-    } catch (error) {
-        res.status(500).json({ message: 'Error al obtener las facturas', error: error.message });
-    }
+        
+        res.json(invoices);
+    } catch (error) {
+        res.status(500).json({ message: 'Error al obtener las facturas', error: error.message });
+    }
 };
 
 export const createInvoice = async (req, res) => {

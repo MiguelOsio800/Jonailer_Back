@@ -2,9 +2,22 @@ import { Remesa, Invoice, Vehicle, Asociado, sequelize, Office } from '../models
 
 export const getRemesas = async (req, res) => {
     try {
-        const userOfficeId = req.user.officeId; // Se obtiene la oficina del usuario logueado
+        const { user } = req;
+        const globalRoles = ['role-admin', 'role-tecnologia', 'role-soporte']; 
+        
+        let whereClause = {};
+
+        // Si NO es un rol global, forzamos a que solo busque los de su oficina
+        if (user && !globalRoles.includes(user.roleId)) {
+            if (user.officeId) {
+                whereClause.officeId = user.officeId;
+            } else {
+                whereClause.id = null; // Si no es global y no tiene oficina, no ve nada
+            }
+        }
+
         const remesas = await Remesa.findAll({ 
-            where: { officeId: userOfficeId }, // Se aplica el filtro por oficina
+            where: whereClause, 
             order: [['date', 'DESC']] 
         });
         res.json(remesas);
