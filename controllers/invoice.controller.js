@@ -8,54 +8,39 @@ export const getInvoices = async (req, res) => {
         const { user } = req;
         const whereClause = {};
 
-        // 1. Definimos los roles con acceso a todas las oficinas
         const globalRoles = ['role-admin', 'role-tecnologia', 'role-soporte']; 
 
-        // === FILTRO UNIVERSAL DE VISIBILIDAD DE FACTURAS (ACTUALIZADO CON ROLES GLOBALES) ===
-        // 2. Si el usuario existe y NO tiene un rol global, aplicamos el filtro estricto de oficina
+        // === FILTRO ESTRICTO: SOLO VEO LO QUE CREA MI OFICINA ===
         if (user && !globalRoles.includes(user.roleId)) {
             if (user.officeId) {
-                const userOfficeId = user.officeId;
-
-                // Se usa Op.or para que el usuario vea:
-                // 1. Facturas creadas en su oficina (officeId)
-                // 2. O Facturas destinadas a su oficina.
-                whereClause[Op.or] = [
-                    // Condición 1: Facturas creadas en su oficina (Historial de Ventas Propio)
-                    { officeId: userOfficeId },
-                    
-                    // Condición 2: Facturas destinadas a su oficina (Carga Entrante o Historial de Recepción)
-                    // ELIMINAMOS EL FILTRO DE SHIPPING STATUS para asegurarnos de que la factura se cargue siempre que
-                    // esté asociada a una oficina de destino, sin importar su estado final.
-                    {
-                        // Busca dentro del campo JSONB 'guide' la oficina de destino
-                        guide: {
-                            destinationOfficeId: userOfficeId
-                        }
-                    }
-                ];
+                
+                // REGLA: La factura tiene que tener EXACTAMENTE el mismo officeId que el usuario.
+                // Ni Barinas ve lo de Caracas, ni Caracas ve lo de Barinas.
+                whereClause.officeId = user.officeId;
                 
             } else {
-                 // Si el usuario no tiene un rol global y tampoco tiene officeId asignada, no ve ninguna factura.
+                // Si el usuario no tiene rol global ni oficina asignada, no ve nada
                 whereClause.id = null;
             }
         }
-        // Nota: Si el usuario SÍ tiene un rol global, el bloque if se salta y el whereClause se queda vacío {}, trayendo TODAS las facturas.
+        // Nota: Los administradores siguen viendo TODO porque el whereClause queda vacío {}.
 
         const invoices = await Invoice.findAll({ 
             where: whereClause, 
             order: [['invoiceNumber', 'DESC']],
             include: [
                 { model: Office, attributes: ['name', 'code'] },
-                { model: Remesa, attributes: ['remesaNumber', 'date'] } // <-- NUEVO: Incluye los datos de la remesa
+                { model: Remesa, attributes: ['remesaNumber', 'date'] } 
             ]
         });
         
         res.json(invoices);
     } catch (error) {
+        console.error("Error al obtener las facturas:", error);
         res.status(500).json({ message: 'Error al obtener las facturas', error: error.message });
     }
 };
+        
 
 export const createInvoice = async (req, res) => {
     const t = await sequelize.transaction();

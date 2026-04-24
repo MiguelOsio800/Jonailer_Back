@@ -69,50 +69,52 @@ export const createRemesa = async (req, res) => {
         let totalPagado = 0;
         let totalDestino = 0;
         
-        let sumFavorCoopBase = 0;
-        let sumSeguro = 0;
-        let sumIpostel = 0;
-        let sumManejo = 0;
-        let sumIva = 0; // <-- NOTA: Si el IVA está en otro campo, debes sumarlo aquí.
+        let cargosDestino = 0;    // Suma de Coop+Seguro+Ipostel+Manejo SOLO de Destino
+        let favorSocioPagado = 0; // Suma del favor socio (70%) SOLO de las Pagadas
 
         invoices.forEach(inv => {
             const montoFactura = Number(inv.totalAmount) || 0;
-            sumSeguro += Number(inv.insuranceAmount) || 0;
-            sumIpostel += Number(inv.ipostelFee) || 0;
-            sumManejo += Number(inv.Montomanejo) || 0;
+            const seguro = Number(inv.insuranceAmount) || 0;
+            const ipostel = Number(inv.ipostelFee) || 0;
+            const manejo = Number(inv.Montomanejo) || 0;
+            const iva = 0; // <-- NOTA: Si el IVA está en otro campo, debes sumarlo aquí.
 
-            // Calcular favor coop base (Ej: 15% o 30% del flete)
+            // Calcular favor coop base de esta factura individual
             const tipo = (inv.shippingType || '').toLowerCase();
             const porcentaje = (tipo.includes('franquicia') || tipo.includes('expreso') || tipo.includes('mudanza')) ? 0.15 : 0.30;
-            sumFavorCoopBase += montoFactura * porcentaje;
+            const favorCoop = montoFactura * porcentaje;
 
-            // Separar montos por estado de pago (Pagada = Flete Pagado, Pendiente = Cobro en Destino)
+            // Total de cargos extras de esta factura individual
+            const cargosExtrasFactura = favorCoop + seguro + ipostel + manejo + iva;
+
+            // Separar montos por estado de pago (Pagada = Efectivo en Origen, Pendiente = Efectivo en Destino)
             if (inv.paymentStatus === 'Pagada') {
                 totalPagado += montoFactura;
+                // Calculamos el 70% del socio solo de las facturas que él ya cobró
+                favorSocioPagado += (montoFactura * 0.70); 
             } else {
                 totalDestino += montoFactura;
+                // Sumamos los cargos extras SOLO si la factura es de cobro en destino
+                cargosDestino += cargosExtrasFactura;
             }
         });
 
-        // La base de cobro de la cooperativa
-        const cargosExtras = sumFavorCoopBase + sumSeguro + sumIpostel + sumManejo + sumIva;
         let cooperativeAmount = 0;
 
         // Lógica de Escenarios
         if (totalDestino === 0 && totalPagado > 0) {
-            // Escenario 3: Solo Pagado. El socio se queda con el 70% del monto.
+            // Escenario 3: Solo Pagado. El socio se queda con el 70%.
             const favorSocio = totalPagado * 0.70;
-            cooperativeAmount = totalPagado - favorSocio; // El resto va a la cooperativa
+            cooperativeAmount = totalPagado - favorSocio; // El socio debe este resto a la cooperativa
         } 
         else if (totalPagado === 0 && totalDestino > 0) {
-            // Escenario 4: Solo Destino. Favor cooperativa = sumatorias
-            cooperativeAmount = cargosExtras;
+            // Escenario 4: Solo Destino. La cooperativa cobra y se queda con sus extras
+            cooperativeAmount = cargosDestino;
         } 
         else {
-            // Escenarios 1 y 2 (Mixtos: Destino superior a pagado o viceversa)
-            // Según tus reglas: favor coop + seguro + ipostel + manejo + iva - favor soc del campo pagado
-            const favorSocioPagado = totalPagado * 0.70; // Asumiendo que el "favor soc" del pagado es el 70%
-            cooperativeAmount = cargosExtras - favorSocioPagado;
+            // Escenario Mixto (El caso que mencionaste)
+            // Tu regla estricta: cargos destino (coop+seguro+ipostel+manejo+iva) - favor soc (pagado)
+            cooperativeAmount = cargosDestino - favorSocioPagado;
         }
 
         // ==========================================

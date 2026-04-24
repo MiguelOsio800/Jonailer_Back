@@ -109,6 +109,9 @@ Office.hasMany(Remesa, { foreignKey: 'officeId' });
 Office.hasMany(Invoice, { foreignKey: 'officeId' });
 Invoice.belongsTo(Office, { foreignKey: 'officeId' });
 
+Invoice.belongsTo(Remesa, { foreignKey: 'remesaId' });
+Remesa.hasMany(Invoice, { foreignKey: 'remesaId' });
+
 // --- Sincronización de la Base de Datos ---
 const syncDatabase = async () => {
     try {
